@@ -27,10 +27,10 @@ type EffectLogger interface {
 	GetRecentResults(count int) []*EffectResult
 }
 
-// Target is the execution unit controlled by the Manager's Reducer.
+// MgrfuncRnner is the execution unit controlled by the Manager's Reducer.
 // It owns its own TargetState and processes Effects autonomously,
 // returning EffectDrivenEvents that are processed recursively by the Reducer.
-type Target struct {
+type MgrfuncRnner struct {
 	mu               sync.RWMutex
 	state            shared.TargetState
 	managedFunc      ManagedFunc
@@ -44,17 +44,17 @@ type Target struct {
 	logger           EffectLogger
 }
 
-// NewTarget creates a new Target.
-func NewTarget(
+// NewRunner creates a new Target.
+func NewRunner(
 	managedFunc ManagedFunc,
 	cleaner Cleaner,
 	logger EffectLogger,
 	config shared.WatcherConfig,
-) *Target {
+) *MgrfuncRnner {
 	bgCtx, cancel := context.WithCancel(context.Background())
 	manageCtx := NewManageContext(bgCtx, logger)
 
-	return &Target{
+	return &MgrfuncRnner{
 		state:            shared.TargetIdle,
 		managedFunc:      managedFunc,
 		cleaner:          cleaner,
@@ -69,38 +69,38 @@ func NewTarget(
 }
 
 // SetManager sets the Manager reference for reinitialization.
-func (t *Target) SetManager(mgr *Manager) {
+func (t *MgrfuncRnner) SetManager(mgr *Manager) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.manager = mgr
 }
 
 // SetCleaner sets the cleaner function.
-func (t *Target) SetCleaner(cleaner Cleaner) {
+func (t *MgrfuncRnner) SetCleaner(cleaner Cleaner) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.cleaner = cleaner
 }
 
 // GetRootContext returns the rootCtx for Watch functions to use.
-func (t *Target) GetRootContext() context.Context {
+func (t *MgrfuncRnner) GetRootContext() context.Context {
 	return t.rootCtx
 }
 
 // GetManageContext returns the persistent ManageContext.
-func (t *Target) GetManageContext() shared.ManageContext {
+func (t *MgrfuncRnner) GetManageContext() shared.ManageContext {
 	return t.manageCtx
 }
 
 // GetTargetState returns the current TargetState.
-func (t *Target) GetTargetState() shared.TargetState {
+func (t *MgrfuncRnner) GetTargetState() shared.TargetState {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	return t.state
 }
 
 // IsCleanupCompleted returns whether cleanup has been completed.
-func (t *Target) IsCleanupCompleted() bool {
+func (t *MgrfuncRnner) IsCleanupCompleted() bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	if t.cleaner == nil {
@@ -110,7 +110,7 @@ func (t *Target) IsCleanupCompleted() bool {
 }
 
 // Reinitialize resets Target state for Manager restart.
-func (t *Target) Reinitialize(mgr *Manager) {
+func (t *MgrfuncRnner) Reinitialize(mgr *Manager) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -134,7 +134,7 @@ func (t *Target) Reinitialize(mgr *Manager) {
 
 // Execute processes an Effect based on the Target's own TargetState.
 // Returns an EffectDrivenEvent describing what happened.
-func (t *Target) Execute(effect Effect) EffectDrivenEvent {
+func (t *MgrfuncRnner) Execute(effect Effect) EffectDrivenEvent {
 	var result *EffectResult
 	var drivenEvent EffectDrivenEvent
 
@@ -166,7 +166,7 @@ func (t *Target) Execute(effect Effect) EffectDrivenEvent {
 }
 
 // executeRun executes the managed function.
-func (t *Target) executeRun(effect *RunEffect) (*EffectResult, EffectDrivenEvent) {
+func (t *MgrfuncRnner) executeRun(effect *RunEffect) (*EffectResult, EffectDrivenEvent) {
 	result := &EffectResult{
 		Effect:    effect,
 		Timestamp: time.Now(),
@@ -250,7 +250,7 @@ func (t *Target) executeRun(effect *RunEffect) (*EffectResult, EffectDrivenEvent
 }
 
 // handleScriptError processes errors from managed function execution.
-func (t *Target) handleScriptError(err error) EffectDrivenEvent {
+func (t *MgrfuncRnner) handleScriptError(err error) EffectDrivenEvent {
 	// Check for WatchInitPanic pattern - crash immediately
 	if err != nil {
 		errMsg := err.Error()
@@ -308,7 +308,7 @@ func (t *Target) handleScriptError(err error) EffectDrivenEvent {
 }
 
 // executeCleanup executes cleanup.
-func (t *Target) executeCleanup(effect *CleanupEffect) (*EffectResult, EffectDrivenEvent) {
+func (t *MgrfuncRnner) executeCleanup(effect *CleanupEffect) (*EffectResult, EffectDrivenEvent) {
 	result := &EffectResult{
 		Effect:    effect,
 		Timestamp: time.Now(),
@@ -358,7 +358,7 @@ func (t *Target) executeCleanup(effect *CleanupEffect) (*EffectResult, EffectDri
 }
 
 // executeRecover implements the recovery logic (Erlang Supervisor pattern).
-func (t *Target) executeRecover() (*EffectResult, EffectDrivenEvent) {
+func (t *MgrfuncRnner) executeRecover() (*EffectResult, EffectDrivenEvent) {
 	result := &EffectResult{
 		Effect:    &RecoverEffect{},
 		Timestamp: time.Now(),
@@ -398,7 +398,7 @@ func (t *Target) executeRecover() (*EffectResult, EffectDrivenEvent) {
 }
 
 // executeDirectKill transitions to Killed without cleanup.
-func (t *Target) executeDirectKill() (*EffectResult, EffectDrivenEvent) {
+func (t *MgrfuncRnner) executeDirectKill() (*EffectResult, EffectDrivenEvent) {
 	t.mu.Lock()
 	t.state = shared.TargetKilled
 	t.mu.Unlock()
@@ -412,7 +412,7 @@ func (t *Target) executeDirectKill() (*EffectResult, EffectDrivenEvent) {
 }
 
 // executeDirectCrash transitions to Crashed without cleanup.
-func (t *Target) executeDirectCrash() (*EffectResult, EffectDrivenEvent) {
+func (t *MgrfuncRnner) executeDirectCrash() (*EffectResult, EffectDrivenEvent) {
 	t.mu.Lock()
 	t.state = shared.TargetCrashed
 	t.mu.Unlock()
@@ -426,7 +426,7 @@ func (t *Target) executeDirectCrash() (*EffectResult, EffectDrivenEvent) {
 }
 
 // countConsecutiveFailures counts recent consecutive failures from logs.
-func (t *Target) countConsecutiveFailures() int {
+func (t *MgrfuncRnner) countConsecutiveFailures() int {
 	recentResults := t.logger.GetRecentResults(t.config.RecoveryPolicy.MaxConsecutiveFailures + 1)
 
 	consecutiveFails := 0
@@ -443,7 +443,7 @@ func (t *Target) countConsecutiveFailures() int {
 }
 
 // calculateRecoveryBackoff calculates exponential backoff for recovery attempts.
-func (t *Target) calculateRecoveryBackoff(failures int) time.Duration {
+func (t *MgrfuncRnner) calculateRecoveryBackoff(failures int) time.Duration {
 	delay := t.config.RecoveryPolicy.BaseRetryDelay
 
 	recoveryAttempts := failures - t.config.RecoveryPolicy.MinConsecutiveFailures
@@ -461,7 +461,7 @@ func (t *Target) calculateRecoveryBackoff(failures int) time.Duration {
 }
 
 // calculateLightweightRetryDelay calculates delay for failures below MinConsecutiveFailures.
-func (t *Target) calculateLightweightRetryDelay(failures int) time.Duration {
+func (t *MgrfuncRnner) calculateLightweightRetryDelay(failures int) time.Duration {
 	delays := t.config.RecoveryPolicy.LightweightRetryDelays
 	if len(delays) == 0 {
 		return 0

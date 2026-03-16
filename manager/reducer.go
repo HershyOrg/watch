@@ -44,7 +44,7 @@ func NewReducer(state *ManagerState, signals *SignalChannels, logger ReduceLogge
 
 // Run starts the reducer loop with synchronous Target execution.
 // Main loop: Wait for event → Reduce → Execute Effect on Target → process EffectDrivenEvent recursively.
-func (r *Reducer) Run(ctx context.Context, target *Target) (err error) {
+func (r *Reducer) Run(ctx context.Context, target *MgrfuncRnner) (err error) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			err = fmt.Errorf("reducer panic: %v", rec)
@@ -69,7 +69,7 @@ func (r *Reducer) Run(ctx context.Context, target *Target) (err error) {
 }
 
 // processAvailableEvents drains event channels respecting priority.
-func (r *Reducer) processAvailableEvents(ctx context.Context, target *Target) {
+func (r *Reducer) processAvailableEvents(ctx context.Context, target *MgrfuncRnner) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -84,7 +84,7 @@ func (r *Reducer) processAvailableEvents(ctx context.Context, target *Target) {
 
 // tryProcessNextEvent processes one event following priority order.
 // Returns true if an event was processed.
-func (r *Reducer) tryProcessNextEvent(target *Target) bool {
+func (r *Reducer) tryProcessNextEvent(target *MgrfuncRnner) bool {
 	cs := r.state.GetControlState()
 
 	// Priority 0: ControlEvent (highest)
@@ -119,7 +119,7 @@ func (r *Reducer) tryProcessNextEvent(target *Target) bool {
 }
 
 // reduceAndExecute performs the complete Reduce-Execute cycle for a SemanticEvent.
-func (r *Reducer) reduceAndExecute(event interface{}, target *Target) {
+func (r *Reducer) reduceAndExecute(event interface{}, target *MgrfuncRnner) {
 	prevSnapshot := r.state.Snapshot()
 
 	// 1. Reduce: update ControlState + determine Effect
@@ -153,7 +153,7 @@ func (r *Reducer) reduceAndExecute(event interface{}, target *Target) {
 }
 
 // reduceEffectDrivenEvent processes an EffectDrivenEvent recursively.
-func (r *Reducer) reduceEffectDrivenEvent(event EffectDrivenEvent, target *Target) {
+func (r *Reducer) reduceEffectDrivenEvent(event EffectDrivenEvent, target *MgrfuncRnner) {
 	prevSnapshot := r.state.Snapshot()
 
 	// 1. Reduce driven event: update ControlState + determine next Effect

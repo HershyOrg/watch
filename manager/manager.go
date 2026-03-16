@@ -48,7 +48,7 @@ type Manager struct {
 	signals *SignalChannels
 
 	reducer *Reducer
-	target  *Target
+	target  *MgrfuncRnner
 
 	memoCache     sync.Map // map[string]any
 	watchRegistry sync.Map // map[string]WatchHandle
@@ -68,7 +68,7 @@ func NewManager(
 
 	reducer := NewReducer(state, signals, logger)
 
-	target := NewTarget(
+	target := NewRunner(
 		managedFunc,
 		cleaner,
 		logger,
@@ -115,7 +115,7 @@ func (m *Manager) GetSignals() *SignalChannels {
 }
 
 // GetTarget returns the Target.
-func (m *Manager) GetTarget() *Target {
+func (m *Manager) GetTarget() *MgrfuncRnner {
 	return m.target
 }
 
