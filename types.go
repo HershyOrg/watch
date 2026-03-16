@@ -8,7 +8,7 @@ import (
 // Re-export core types for convenience
 type (
 	ControlState = shared.ControlState
-	TargetState  = shared.TargetState
+	TargetState  = shared.RunnerState
 
 	SignalPriority = shared.SignalPriority
 	Signal         = shared.Signal

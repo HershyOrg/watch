@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// ControlState represents the Manager's control intent over the Target.
+// ControlState represents the Manager's control intent over the MgrFuncRunner.
 // SemanticEvent → Desired state → recursive Effect loop → Terminal state.
 type ControlState uint8
 
@@ -24,11 +24,11 @@ const (
 
 	// Terminal states (settled after recursive loop completes)
 
-	// ControlStopped indicates the Target has stopped
+	// ControlStopped indicates the MgrFuncRunner has stopped
 	ControlStopped
-	// ControlKilled indicates the Target has been killed
+	// ControlKilled indicates the MgrFuncRunner has been killed
 	ControlKilled
-	// ControlCrashed indicates the Target has crashed
+	// ControlCrashed indicates the MgrFuncRunner has crashed
 	ControlCrashed
 )
 
@@ -60,41 +60,41 @@ func (s ControlState) IsTerminal() bool {
 	return s == ControlStopped || s == ControlKilled || s == ControlCrashed
 }
 
-// TargetState represents the Target's own actual execution state.
-type TargetState uint8
+// RunnerState represents the MgrFuncRunner's own actual execution state.
+type RunnerState uint8
 
 const (
-	// TargetIdle indicates the Target is not doing anything
-	TargetIdle TargetState = iota
-	// TargetRunning indicates the Target is executing the ManagedFunc
-	TargetRunning
-	// TargetCleaningUp indicates the Target is running cleanup
-	TargetCleaningUp
-	// TargetSleeping indicates the Target is in backoff/delay
-	TargetSleeping
-	// TargetStopped indicates the Target has stopped
-	TargetStopped
-	// TargetKilled indicates the Target has been killed
-	TargetKilled
-	// TargetCrashed indicates the Target has crashed
-	TargetCrashed
+	// RunnerIdle indicates the MgrFuncRunner is not doing anything
+	RunnerIdle RunnerState = iota
+	// RunnerRunning indicates the MgrFuncRunner is executing the ManagedFunc
+	RunnerRunning
+	// RunnerCleaningUp indicates the MgrFuncRunner is running cleanup
+	RunnerCleaningUp
+	// RunnerSleeping indicates the MgrFuncRunner is in backoff/delay
+	RunnerSleeping
+	// RunnerStopped indicates the MgrFuncRunner has stopped
+	RunnerStopped
+	// RunnerKilled indicates the MgrFuncRunner has been killed
+	RunnerKilled
+	// RunnerCrashed indicates the MgrFuncRunner has crashed
+	RunnerCrashed
 )
 
-func (s TargetState) String() string {
+func (s RunnerState) String() string {
 	switch s {
-	case TargetIdle:
+	case RunnerIdle:
 		return "Idle"
-	case TargetRunning:
+	case RunnerRunning:
 		return "Running"
-	case TargetCleaningUp:
+	case RunnerCleaningUp:
 		return "CleaningUp"
-	case TargetSleeping:
+	case RunnerSleeping:
 		return "Sleeping"
-	case TargetStopped:
+	case RunnerStopped:
 		return "Stopped"
-	case TargetKilled:
+	case RunnerKilled:
 		return "Killed"
-	case TargetCrashed:
+	case RunnerCrashed:
 		return "Crashed"
 	default:
 		return "Unknown"

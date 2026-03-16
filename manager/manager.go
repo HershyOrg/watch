@@ -38,7 +38,7 @@ func (h *FlowHandle) GetVarName() string                { return h.VarName }
 func (h *FlowHandle) GetCancelFunc() context.CancelFunc { return h.CancelFunc }
 
 // Manager encapsulates all Manager components.
-// It orchestrates the Reducer-Target pattern for reactive execution.
+// It orchestrates the Reducer-MgrFuncRunner pattern for reactive execution.
 type Manager struct {
 	config *shared.WatcherConfig
 
@@ -48,7 +48,7 @@ type Manager struct {
 	signals *SignalChannels
 
 	reducer *Reducer
-	target  *MgrfuncRnner
+	funcRunner  *MgrfuncRnner
 
 	memoCache     sync.Map // map[string]any
 	watchRegistry sync.Map // map[string]WatchHandle
@@ -68,7 +68,7 @@ func NewManager(
 
 	reducer := NewReducer(state, signals, logger)
 
-	target := NewRunner(
+	runner := NewRunner(
 		managedFunc,
 		cleaner,
 		logger,
@@ -81,16 +81,16 @@ func NewManager(
 		state:         state,
 		signals:       signals,
 		reducer:       reducer,
-		target:        target,
+		funcRunner:        runner,
 		memoCache:     sync.Map{},
 		watchRegistry: sync.Map{},
 	}
 
-	// Set Manager reference in Target for reinitialization
-	target.SetManager(mgr)
+	// Set Manager reference in MgrFuncRunner for reinitialization
+	runner.SetManager(mgr)
 
-	// Get ManageContext from Target and set Manager reference
-	if manageCtx, ok := target.GetManageContext().(*ManageContext); ok {
+	// Get ManageContext from MgrFuncRunner and set Manager reference
+	if manageCtx, ok := runner.GetManageContext().(*ManageContext); ok {
 		manageCtx.SetManager(mgr)
 		manageCtx.SetEnvVars(envVars)
 	}
@@ -99,9 +99,9 @@ func NewManager(
 }
 
 // Start starts the Reducer loop.
-// Only Reducer runs in a goroutine - it calls Target synchronously.
+// Only Reducer runs in a goroutine - it calls MgrFuncRunner synchronously.
 func (m *Manager) Start(rootCtx context.Context) {
-	go m.reducer.Run(rootCtx, m.target)
+	go m.reducer.Run(rootCtx, m.funcRunner)
 }
 
 // GetState returns the current ManagerState.
@@ -114,9 +114,9 @@ func (m *Manager) GetSignals() *SignalChannels {
 	return m.signals
 }
 
-// GetTarget returns the Target.
-func (m *Manager) GetTarget() *MgrfuncRnner {
-	return m.target
+// GetRunner returns the MgrFuncRunner.
+func (m *Manager) GetRunner() *MgrfuncRnner {
+	return m.funcRunner
 }
 
 // GetLogger returns the Manager's logger.

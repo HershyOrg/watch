@@ -42,9 +42,9 @@ func NewReducer(state *ManagerState, signals *SignalChannels, logger ReduceLogge
 	}
 }
 
-// Run starts the reducer loop with synchronous Target execution.
-// Main loop: Wait for event → Reduce → Execute Effect on Target → process EffectDrivenEvent recursively.
-func (r *Reducer) Run(ctx context.Context, target *MgrfuncRnner) (err error) {
+// Run starts the reducer loop with synchronous Runner execution.
+// Main loop: Wait for event → Reduce → Execute Effect on Runner → process EffectDrivenEvent recursively.
+func (r *Reducer) Run(ctx context.Context, runner *MgrfuncRnner) (err error) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			err = fmt.Errorf("reducer panic: %v", rec)
@@ -63,19 +63,19 @@ func (r *Reducer) Run(ctx context.Context, target *MgrfuncRnner) (err error) {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-r.signals.NewSigAppended:
-			r.processAvailableEvents(ctx, target)
+			r.processAvailableEvents(ctx, runner)
 		}
 	}
 }
 
 // processAvailableEvents drains event channels respecting priority.
-func (r *Reducer) processAvailableEvents(ctx context.Context, target *MgrfuncRnner) {
+func (r *Reducer) processAvailableEvents(ctx context.Context, runner *MgrfuncRnner) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		default:
-			if !r.tryProcessNextEvent(target) {
+			if !r.tryProcessNextEvent(runner) {
 				return
 			}
 		}
@@ -84,13 +84,13 @@ func (r *Reducer) processAvailableEvents(ctx context.Context, target *MgrfuncRnn
 
 // tryProcessNextEvent processes one event following priority order.
 // Returns true if an event was processed.
-func (r *Reducer) tryProcessNextEvent(target *MgrfuncRnner) bool {
+func (r *Reducer) tryProcessNextEvent(runner *MgrfuncRnner) bool {
 	cs := r.state.GetControlState()
 
 	// Priority 0: ControlEvent (highest)
 	select {
 	case event := <-r.signals.ControlEventChan:
-		r.reduceAndExecute(event, target)
+		r.reduceAndExecute(event, runner)
 		return true
 	default:
 	}
@@ -99,7 +99,7 @@ func (r *Reducer) tryProcessNextEvent(target *MgrfuncRnner) bool {
 	if r.canProcessUserEvent(cs) {
 		select {
 		case event := <-r.signals.UserEventChan:
-			r.reduceAndExecute(event, target)
+			r.reduceAndExecute(event, runner)
 			return true
 		default:
 		}
@@ -109,7 +109,7 @@ func (r *Reducer) tryProcessNextEvent(target *MgrfuncRnner) bool {
 	if r.canProcessVarEvent(cs) {
 		select {
 		case event := <-r.signals.VarSigChan:
-			r.reduceAndExecute(event, target)
+			r.reduceAndExecute(event, runner)
 			return true
 		default:
 		}
@@ -119,7 +119,7 @@ func (r *Reducer) tryProcessNextEvent(target *MgrfuncRnner) bool {
 }
 
 // reduceAndExecute performs the complete Reduce-Execute cycle for a SemanticEvent.
-func (r *Reducer) reduceAndExecute(event interface{}, target *MgrfuncRnner) {
+func (r *Reducer) reduceAndExecute(event interface{}, runner *MgrfuncRnner) {
 	prevSnapshot := r.state.Snapshot()
 
 	// 1. Reduce: update ControlState + determine Effect
@@ -142,18 +142,18 @@ func (r *Reducer) reduceAndExecute(event interface{}, target *MgrfuncRnner) {
 		return
 	}
 
-	// 4. Pass effect to Target
-	drivenEvent := target.Execute(effect)
+	// 4. Pass effect to MgrFuncRunner
+	drivenEvent := runner.Execute(effect)
 	if drivenEvent == nil {
 		return
 	}
 
 	// 5. Process EffectDrivenEvent recursively
-	r.reduceEffectDrivenEvent(drivenEvent, target)
+	r.reduceEffectDrivenEvent(drivenEvent, runner)
 }
 
 // reduceEffectDrivenEvent processes an EffectDrivenEvent recursively.
-func (r *Reducer) reduceEffectDrivenEvent(event EffectDrivenEvent, target *MgrfuncRnner) {
+func (r *Reducer) reduceEffectDrivenEvent(event EffectDrivenEvent, runner *MgrfuncRnner) {
 	prevSnapshot := r.state.Snapshot()
 
 	// 1. Reduce driven event: update ControlState + determine next Effect
@@ -175,14 +175,14 @@ func (r *Reducer) reduceEffectDrivenEvent(event EffectDrivenEvent, target *Mgrfu
 		return
 	}
 
-	// 4. Pass effect to Target
-	drivenEvent := target.Execute(effect)
+	// 4. Pass effect to Runner
+	drivenEvent := runner.Execute(effect)
 	if drivenEvent == nil {
 		return
 	}
 
 	// 5. Continue recursion
-	r.reduceEffectDrivenEvent(drivenEvent, target)
+	r.reduceEffectDrivenEvent(drivenEvent, runner)
 }
 
 // reduce processes a SemanticEvent: updates ControlState and returns the Effect to execute.

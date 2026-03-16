@@ -77,9 +77,9 @@ func (e *ControlEvent) String() string {
 		e.Kind, e.Reason, e.ReceivedTime.Format(time.RFC3339))
 }
 
-// --- EffectDrivenEvent: returned by Target, processed recursively ---
+// --- EffectDrivenEvent: returned by MgrFuncRunner, processed recursively ---
 
-// EffectDrivenEvent is returned by Target after executing an Effect.
+// EffectDrivenEvent is returned by MgrFuncRunner after executing an Effect.
 // Processed recursively by the Reducer (never queued in channels).
 type EffectDrivenEvent interface {
 	isEffectDrivenEvent() // marker method
@@ -104,7 +104,7 @@ func (e *ExecutionFailed) String() string {
 }
 
 // ErrorSuppressed indicates a lightweight retry was applied (failures < MinConsecutiveFailures).
-// Target returns to Idle after backoff delay.
+// MgrFuncRunner returns to Idle after backoff delay.
 type ErrorSuppressed struct{}
 
 func (e *ErrorSuppressed) isEffectDrivenEvent() {}
@@ -120,7 +120,7 @@ func (e *CleanupCompleted) String() string {
 	return fmt.Sprintf("CleanupCompleted{forState=%s}", e.ForState)
 }
 
-// RecoveryReady indicates the Target is ready to retry after backoff.
+// RecoveryReady indicates the MgrFuncRunner is ready to retry after backoff.
 type RecoveryReady struct{}
 
 func (e *RecoveryReady) isEffectDrivenEvent() {}
@@ -132,13 +132,13 @@ type RecoveryExhausted struct{}
 func (e *RecoveryExhausted) isEffectDrivenEvent() {}
 func (e *RecoveryExhausted) String() string       { return "RecoveryExhausted" }
 
-// DirectKilled indicates the Target was killed without cleanup.
+// DirectKilled indicates the MgrFuncRunner was killed without cleanup.
 type DirectKilled struct{}
 
 func (e *DirectKilled) isEffectDrivenEvent() {}
 func (e *DirectKilled) String() string       { return "DirectKilled" }
 
-// DirectCrashed indicates the Target crashed without cleanup.
+// DirectCrashed indicates the MgrFuncRunner crashed without cleanup.
 type DirectCrashed struct{}
 
 func (e *DirectCrashed) isEffectDrivenEvent() {}

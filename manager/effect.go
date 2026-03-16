@@ -7,13 +7,13 @@ import (
 	"github.com/HershyOrg/watch/shared"
 )
 
-// Effect defines an action to be executed by the Target.
+// Effect defines an action to be executed by the MgrFuncRunner.
 type Effect interface {
 	effectMarker() // marker method
 	String() string
 }
 
-// RunEffect tells the Target to execute the ManagedFunc.
+// RunEffect tells the MgrFuncRunner to execute the ManagedFunc.
 type RunEffect struct {
 	TriggeredSignal *shared.TriggeredSignal
 	NeedInit        bool            // Whether initialization is needed (restart scenarios)
@@ -28,7 +28,7 @@ func (e *RunEffect) String() string {
 	return "RunEffect"
 }
 
-// CleanupEffect tells the Target to run cleanup for a terminal state transition.
+// CleanupEffect tells the MgrFuncRunner to run cleanup for a terminal state transition.
 type CleanupEffect struct {
 	ForState shared.ControlState // which terminal state this cleanup is for
 }
@@ -38,19 +38,19 @@ func (e *CleanupEffect) String() string {
 	return fmt.Sprintf("CleanupEffect{forState=%s}", e.ForState)
 }
 
-// RecoverEffect tells the Target to attempt recovery.
+// RecoverEffect tells the MgrFuncRunner to attempt recovery.
 type RecoverEffect struct{}
 
 func (e *RecoverEffect) effectMarker() {}
 func (e *RecoverEffect) String() string { return "RecoverEffect" }
 
-// DirectKillEffect tells the Target to transition to Killed without cleanup.
+// DirectKillEffect tells the MgrFuncRunner to transition to Killed without cleanup.
 type DirectKillEffect struct{}
 
 func (e *DirectKillEffect) effectMarker() {}
 func (e *DirectKillEffect) String() string { return "DirectKillEffect" }
 
-// DirectCrashEffect tells the Target to transition to Crashed without cleanup.
+// DirectCrashEffect tells the MgrFuncRunner to transition to Crashed without cleanup.
 type DirectCrashEffect struct{}
 
 func (e *DirectCrashEffect) effectMarker() {}

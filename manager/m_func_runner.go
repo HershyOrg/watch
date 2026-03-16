@@ -28,11 +28,11 @@ type EffectLogger interface {
 }
 
 // MgrfuncRnner is the execution unit controlled by the Manager's Reducer.
-// It owns its own TargetState and processes Effects autonomously,
+// It owns its own MgrFuncRunnerState and processes Effects autonomously,
 // returning EffectDrivenEvents that are processed recursively by the Reducer.
 type MgrfuncRnner struct {
 	mu               sync.RWMutex
-	state            shared.TargetState
+	state            shared.RunnerState
 	managedFunc      ManagedFunc
 	cleaner          Cleaner
 	config           shared.WatcherConfig
@@ -44,7 +44,7 @@ type MgrfuncRnner struct {
 	logger           EffectLogger
 }
 
-// NewRunner creates a new Target.
+// NewRunner creates a new MgrFuncRunner.
 func NewRunner(
 	managedFunc ManagedFunc,
 	cleaner Cleaner,
@@ -55,7 +55,7 @@ func NewRunner(
 	manageCtx := NewManageContext(bgCtx, logger)
 
 	return &MgrfuncRnner{
-		state:            shared.TargetIdle,
+		state:            shared.RunnerIdle,
 		managedFunc:      managedFunc,
 		cleaner:          cleaner,
 		logger:           logger,
@@ -92,8 +92,8 @@ func (t *MgrfuncRnner) GetManageContext() shared.ManageContext {
 	return t.manageCtx
 }
 
-// GetTargetState returns the current TargetState.
-func (t *MgrfuncRnner) GetTargetState() shared.TargetState {
+// GetRunnerState returns the current MgrFuncRunnerState.
+func (t *MgrfuncRnner) GetRunnerState() shared.RunnerState {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	return t.state
@@ -109,7 +109,7 @@ func (t *MgrfuncRnner) IsCleanupCompleted() bool {
 	return t.cleanupCompleted
 }
 
-// Reinitialize resets Target state for Manager restart.
+// Reinitialize resets MgrFuncRunner state for Manager restart.
 func (t *MgrfuncRnner) Reinitialize(mgr *Manager) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -132,7 +132,7 @@ func (t *MgrfuncRnner) Reinitialize(mgr *Manager) {
 	mgr.Reinitialize()
 }
 
-// Execute processes an Effect based on the Target's own TargetState.
+// Execute processes an Effect based on the MgrFuncRunner's own MgrFuncRunnerState.
 // Returns an EffectDrivenEvent describing what happened.
 func (t *MgrfuncRnner) Execute(effect Effect) EffectDrivenEvent {
 	var result *EffectResult
@@ -183,9 +183,9 @@ func (t *MgrfuncRnner) executeRun(effect *RunEffect) (*EffectResult, EffectDrive
 		}
 	}
 
-	// TargetState → Running
+	// MgrFuncRunnerState → Running
 	t.mu.Lock()
-	t.state = shared.TargetRunning
+	t.state = shared.RunnerRunning
 	t.mu.Unlock()
 
 	// Create execution context with timeout from rootCtx
@@ -224,9 +224,9 @@ func (t *MgrfuncRnner) executeRun(effect *RunEffect) (*EffectResult, EffectDrive
 		result.Success = false
 		result.Error = execCtx.Err()
 
-		// TargetState → Idle (matches original behavior: timeout → Ready without recovery)
+		// MgrFuncRunnerState → Idle (matches original behavior: timeout → Ready without recovery)
 		t.mu.Lock()
-		t.state = shared.TargetIdle
+		t.state = shared.RunnerIdle
 		t.mu.Unlock()
 
 		drivenEvent = &ErrorSuppressed{}
@@ -238,9 +238,9 @@ func (t *MgrfuncRnner) executeRun(effect *RunEffect) (*EffectResult, EffectDrive
 			drivenEvent = t.handleScriptError(err)
 		} else {
 			result.Success = true
-			// TargetState → Idle
+			// MgrFuncRunnerState → Idle
 			t.mu.Lock()
-			t.state = shared.TargetIdle
+			t.state = shared.RunnerIdle
 			t.mu.Unlock()
 			drivenEvent = &ExecutionCompleted{}
 		}
@@ -256,7 +256,7 @@ func (t *MgrfuncRnner) handleScriptError(err error) EffectDrivenEvent {
 		errMsg := err.Error()
 		if strings.Contains(errMsg, "panic:") && strings.Contains(errMsg, "WatchInitPanic") {
 			t.mu.Lock()
-			t.state = shared.TargetCrashed
+			t.state = shared.RunnerCrashed
 			t.mu.Unlock()
 			return &DirectCrashed{}
 		}
@@ -282,14 +282,14 @@ func (t *MgrfuncRnner) handleScriptError(err error) EffectDrivenEvent {
 			delay := t.calculateLightweightRetryDelay(consecutiveFails)
 			if delay > 0 {
 				t.mu.Lock()
-				t.state = shared.TargetSleeping
+				t.state = shared.RunnerSleeping
 				t.mu.Unlock()
 
 				time.Sleep(delay)
 			}
 
 			t.mu.Lock()
-			t.state = shared.TargetIdle
+			t.state = shared.RunnerIdle
 			t.mu.Unlock()
 
 			return &ErrorSuppressed{}
@@ -297,7 +297,7 @@ func (t *MgrfuncRnner) handleScriptError(err error) EffectDrivenEvent {
 
 		// Too many consecutive failures - request recovery
 		t.mu.Lock()
-		t.state = shared.TargetIdle
+		t.state = shared.RunnerIdle
 		t.mu.Unlock()
 
 		return &ExecutionFailed{
@@ -317,9 +317,9 @@ func (t *MgrfuncRnner) executeCleanup(effect *CleanupEffect) (*EffectResult, Eff
 	// Cancel rootCtx before cleanup - stops all Watch goroutines
 	t.rootCtxCancel()
 
-	// TargetState → CleaningUp
+	// MgrFuncRunnerState → CleaningUp
 	t.mu.Lock()
-	t.state = shared.TargetCleaningUp
+	t.state = shared.RunnerCleaningUp
 	t.mu.Unlock()
 
 	// Execute cleanup using persistent ManageContext
@@ -339,17 +339,17 @@ func (t *MgrfuncRnner) executeCleanup(effect *CleanupEffect) (*EffectResult, Eff
 		result.Success = true
 	}
 
-	// Update TargetState based on ForState
+	// Update MgrFuncRunnerState based on ForState
 	t.mu.Lock()
 	switch effect.ForState {
 	case shared.ControlStopped:
-		t.state = shared.TargetStopped
+		t.state = shared.RunnerStopped
 	case shared.ControlKilled:
-		t.state = shared.TargetKilled
+		t.state = shared.RunnerKilled
 	case shared.ControlCrashed:
-		t.state = shared.TargetCrashed
+		t.state = shared.RunnerCrashed
 	default:
-		t.state = shared.TargetStopped
+		t.state = shared.RunnerStopped
 	}
 	t.cleanupCompleted = true
 	t.mu.Unlock()
@@ -372,7 +372,7 @@ func (t *MgrfuncRnner) executeRecover() (*EffectResult, EffectDrivenEvent) {
 		result.Error = fmt.Errorf("max consecutive failures reached: %d", consecutiveFails)
 
 		t.mu.Lock()
-		t.state = shared.TargetCrashed
+		t.state = shared.RunnerCrashed
 		t.mu.Unlock()
 
 		return result, &RecoveryExhausted{}
@@ -381,16 +381,16 @@ func (t *MgrfuncRnner) executeRecover() (*EffectResult, EffectDrivenEvent) {
 	// Calculate recovery backoff delay
 	delay := t.calculateRecoveryBackoff(consecutiveFails)
 
-	// TargetState → Sleeping
+	// MgrFuncRunnerState → Sleeping
 	t.mu.Lock()
-	t.state = shared.TargetSleeping
+	t.state = shared.RunnerSleeping
 	t.mu.Unlock()
 
 	time.Sleep(delay)
 
-	// TargetState → Idle (ready for retry)
+	// MgrFuncRunnerState → Idle (ready for retry)
 	t.mu.Lock()
-	t.state = shared.TargetIdle
+	t.state = shared.RunnerIdle
 	t.mu.Unlock()
 
 	result.Success = true
@@ -400,7 +400,7 @@ func (t *MgrfuncRnner) executeRecover() (*EffectResult, EffectDrivenEvent) {
 // executeDirectKill transitions to Killed without cleanup.
 func (t *MgrfuncRnner) executeDirectKill() (*EffectResult, EffectDrivenEvent) {
 	t.mu.Lock()
-	t.state = shared.TargetKilled
+	t.state = shared.RunnerKilled
 	t.mu.Unlock()
 
 	result := &EffectResult{
@@ -414,7 +414,7 @@ func (t *MgrfuncRnner) executeDirectKill() (*EffectResult, EffectDrivenEvent) {
 // executeDirectCrash transitions to Crashed without cleanup.
 func (t *MgrfuncRnner) executeDirectCrash() (*EffectResult, EffectDrivenEvent) {
 	t.mu.Lock()
-	t.state = shared.TargetCrashed
+	t.state = shared.RunnerCrashed
 	t.mu.Unlock()
 
 	result := &EffectResult{

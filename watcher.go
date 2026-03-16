@@ -174,7 +174,7 @@ func (w *Watcher) Stop() error {
 		select {
 		case <-ticker.C:
 			cs := w.manager.GetState().GetControlState()
-			if cs.IsTerminal() && w.manager.GetTarget().IsCleanupCompleted() {
+			if cs.IsTerminal() && w.manager.GetRunner().IsCleanupCompleted() {
 				goto StopCompleted
 			}
 		case <-timeout:
