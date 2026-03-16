@@ -299,6 +299,16 @@ func (r *Reducer) reduceDriven(event EffectDrivenEvent) Effect {
 	return nil
 }
 
+// Reduce is the exported version of reduce for testing.
+func (r *Reducer) Reduce(event interface{}) (Effect, *shared.TriggeredSignal) {
+	return r.reduce(event)
+}
+
+// ReduceDriven is the exported version of reduceDriven for testing.
+func (r *Reducer) ReduceDriven(event EffectDrivenEvent) Effect {
+	return r.reduceDriven(event)
+}
+
 // canProcessUserEvent checks if current state can process UserEvent.
 func (r *Reducer) canProcessUserEvent(cs shared.ControlState) bool {
 	return cs == shared.ControlIdle

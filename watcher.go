@@ -260,6 +260,16 @@ func (w *Watcher) GetLogger() *manager.Logger {
 	return w.manager.GetLogger()
 }
 
+// GetManager returns the internal Manager for testing purposes.
+func (w *Watcher) GetManager() *manager.Manager {
+	return w.manager
+}
+
+// IsRunning returns whether the Watcher is currently running.
+func (w *Watcher) IsRunning() bool {
+	return w.isRunning.Load()
+}
+
 // StopManager stops the Manager (enters Stopped state).
 func (w *Watcher) StopManager() error {
 	if !w.isRunning.Load() {
