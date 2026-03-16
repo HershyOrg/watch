@@ -1,6 +1,10 @@
 package manager
 
-import "github.com/HershyOrg/watch/shared"
+import (
+	"fmt"
+
+	"github.com/HershyOrg/watch/shared"
+)
 
 // CleanupBuilder provides a fluent interface for registering cleanup functions.
 // It holds a Manager reference and allows optional cleanup registration before Start.
@@ -41,8 +45,13 @@ type cleanupAdapter struct {
 }
 
 // ClearRun implements the Cleaner interface by calling the user's cleanup function.
-func (ca *cleanupAdapter) ClearRun(ctx shared.ManageContext) error {
-	// Simply call the cleanup function with ManageContext
+func (ca *cleanupAdapter) ClearRun(ctx shared.ManageContext) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("cleanup panicked: %v", r)
+		}
+	}()
+
 	ca.cleanupFn(ctx)
 	return nil
 }
