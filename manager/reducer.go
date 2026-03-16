@@ -281,7 +281,7 @@ func (r *Reducer) reduceDriven(event EffectDrivenEvent) Effect {
 
 	case *RecoveryReady:
 		r.state.SetControlState(shared.ControlRunDesired)
-		return &RunEffect{TriggeredSignal: &shared.TriggeredSignal{IsWatcherSig: true}}
+		return &RunEffect{TriggeredSignal: &shared.TriggeredSignal{IsWatcherSig: true}, NeedInit: true}
 
 	case *RecoveryExhausted:
 		r.state.SetControlState(shared.ControlCrashed)
