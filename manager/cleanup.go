@@ -23,8 +23,8 @@ func (cb *CleanupBuilder) Cleanup(cleanupFn func(ctx shared.ManageContext)) *Cle
 		cleanupFn: cleanupFn,
 	}
 
-	// Set cleaner in the Manager's EffectHandler
-	cb.manager.GetEffectHandler().SetCleaner(cleaner)
+	// Set cleaner in the Manager's Target
+	cb.manager.GetTarget().SetCleaner(cleaner)
 
 	return cb
 }

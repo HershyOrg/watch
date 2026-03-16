@@ -12,13 +12,13 @@ import (
 // ReduceAction represents a state transition that occurred.
 type ReduceAction struct {
 	PrevState       StateSnapshot
-	Signal          shared.Signal
+	Event           interface{} // SemanticEvent or EffectDrivenEvent
 	NextState       StateSnapshot
-	TriggeredSignal *shared.TriggeredSignal // Information about which signals triggered this action
+	TriggeredSignal *shared.TriggeredSignal
 }
 
-// Reducer manages state transitions based on signals.
-// It implements priority-based signal processing.
+// Reducer manages state transitions based on events.
+// It implements priority-based event processing and absorbs the Commander role.
 type Reducer struct {
 	state   *ManagerState
 	signals *SignalChannels
@@ -29,7 +29,7 @@ type Reducer struct {
 type ReduceLogger interface {
 	LogReduce(action ReduceAction)
 	LogWatchError(varName string, phase WatchErrorPhase, err error)
-	LogStateTransitionFault(from, to shared.ManagerInnerState, reason string, err error)
+	LogStateTransitionFault(from, to shared.ControlState, reason string, err error)
 }
 
 // NewReducer creates a new Reducer.
@@ -41,27 +41,16 @@ func NewReducer(state *ManagerState, signals *SignalChannels, logger ReduceLogge
 	}
 }
 
-// RunWithEffects starts the reducer loop with synchronous effect execution.
-// This is the main loop following the specification:
-// 1. Wait for signal
-// 2. Reduce (state transition)
-// 3. Call EffectCommander synchronously
-// 4. Call EffectHandler synchronously
-// 5. If effect returns WatcherSig, process it recursively
-// Priority: WatcherSig > UserSig > VarSig
-func (r *Reducer) RunWithEffects(ctx context.Context, commander *EffectCommander, handler *EffectHandler) (err error) {
+// Run starts the reducer loop with synchronous Target execution.
+// Main loop: Wait for event → Reduce → Execute Effect on Target → process EffectDrivenEvent recursively.
+func (r *Reducer) Run(ctx context.Context, target *Target) (err error) {
 	defer func() {
 		if rec := recover(); rec != nil {
-			// Panic recovery
 			err = fmt.Errorf("reducer panic: %v", rec)
+			r.state.SetControlState(shared.ControlCrashed)
 
-			// Transition to Crashed state
-			r.state.SetManagerInnerState(shared.StateCrashed)
-
-			// Log panic with stack trace
 			fmt.Printf("[Reducer] PANIC RECOVERED: %v\n", rec)
 			fmt.Printf("[Reducer] Stack trace:\n")
-
 			buf := make([]byte, 4096)
 			n := runtime.Stack(buf, false)
 			fmt.Printf("%s\n", buf[:n])
@@ -73,62 +62,53 @@ func (r *Reducer) RunWithEffects(ctx context.Context, commander *EffectCommander
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-r.signals.NewSigAppended:
-			// Process all available signals respecting priority
-			r.processAvailableSignalsWithEffects(ctx, commander, handler)
+			r.processAvailableEvents(ctx, target)
 		}
 	}
 }
 
-// processAvailableSignalsWithEffects drains signal channels respecting priority.
-// For each signal: Reduce → CommandEffect → ExecuteEffect → handle result WatcherSig.
-func (r *Reducer) processAvailableSignalsWithEffects(ctx context.Context, commander *EffectCommander, handler *EffectHandler) {
+// processAvailableEvents drains event channels respecting priority.
+func (r *Reducer) processAvailableEvents(ctx context.Context, target *Target) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		default:
-			// Try to process one signal, highest priority first
-			if !r.tryProcessNextSignalWithEffects(commander, handler) {
-				// No more signals to process
+			if !r.tryProcessNextEvent(target) {
 				return
 			}
 		}
 	}
 }
 
-// tryProcessNextSignalWithEffects processes one signal following the specification:
-// 1. Select signal by priority
-// 2. Reduce (state transition)
-// 3. CommandEffect (synchronous)
-// 4. ExecuteEffect (synchronous)
-// 5. If effect returns WatcherSig, process it recursively (atomic execution)
-// Returns true if a signal was processed, false if no signals available.
-func (r *Reducer) tryProcessNextSignalWithEffects(commander *EffectCommander, handler *EffectHandler) bool {
-	currentState := r.state.GetManagerInnerState()
+// tryProcessNextEvent processes one event following priority order.
+// Returns true if an event was processed.
+func (r *Reducer) tryProcessNextEvent(target *Target) bool {
+	cs := r.state.GetControlState()
 
-	// Priority 1: WatcherSig (highest)
+	// Priority 0: ControlEvent (highest)
 	select {
-	case sig := <-r.signals.ManagerInnerSigChan:
-		r.reduceAndExecuteEffect(sig, commander, handler)
+	case event := <-r.signals.ControlEventChan:
+		r.reduceAndExecute(event, target)
 		return true
 	default:
 	}
 
-	// Priority 2: UserSig
-	if r.canProcessUserSig(currentState) {
+	// Priority 1: UserEvent
+	if r.canProcessUserEvent(cs) {
 		select {
-		case sig := <-r.signals.UserSigChan:
-			r.reduceAndExecuteEffect(sig, commander, handler)
+		case event := <-r.signals.UserEventChan:
+			r.reduceAndExecute(event, target)
 			return true
 		default:
 		}
 	}
 
-	// Priority 3: VarSig (lowest)
-	if r.canProcessVarSig(currentState) {
+	// Priority 2: VarSig (lowest)
+	if r.canProcessVarEvent(cs) {
 		select {
-		case sig := <-r.signals.VarSigChan:
-			r.reduceAndExecuteEffect(sig, commander, handler)
+		case event := <-r.signals.VarSigChan:
+			r.reduceAndExecute(event, target)
 			return true
 		default:
 		}
@@ -137,95 +117,196 @@ func (r *Reducer) tryProcessNextSignalWithEffects(commander *EffectCommander, ha
 	return false
 }
 
-// reduceAndExecuteEffect performs the complete Reduce-Effect cycle:
-// Reduce → CommandEffect → ExecuteEffect → handle result.
-func (r *Reducer) reduceAndExecuteEffect(sig shared.Signal, commander *EffectCommander, handler *EffectHandler) {
-	// 1. Reduce: perform state transition and get triggered signal info
+// reduceAndExecute performs the complete Reduce-Execute cycle for a SemanticEvent.
+func (r *Reducer) reduceAndExecute(event interface{}, target *Target) {
 	prevSnapshot := r.state.Snapshot()
-	var triggeredSig *shared.TriggeredSignal
 
-	switch s := sig.(type) {
-	case *ManagerInnerSig:
-		triggeredSig = r.reduceManagerInnerSig(s)
-	case *UserSig:
-		triggeredSig = r.reduceUserSig(s)
-	case *wm.DELETED_VarSig:
-		triggeredSig = r.reduceVarSig(s)
-		// Note: InitRun completion check moved after effect execution for atomic processing
-	default:
-		return // Unknown signal type
-	}
+	// 1. Reduce: update ControlState + determine Effect
+	effect, triggeredSig := r.reduce(event)
 
-	// 2. Create action with triggered signal information
+	// 2. Log
 	action := ReduceAction{
 		PrevState:       prevSnapshot,
-		Signal:          sig,
+		Event:           event,
 		NextState:       r.state.Snapshot(),
 		TriggeredSignal: triggeredSig,
 	}
-
-	// Log the reduce action
 	if r.logger != nil {
 		r.logger.LogReduce(action)
 	}
 
-	// 4. CommandEffect (synchronous)
-	effectDef := commander.CommandEffect(action)
-	if effectDef == nil {
-		return // No effect to execute
+	// 3. No effect → done
+	if effect == nil {
+		return
 	}
 
-	// 5. ExecuteEffect (synchronous)
-	resultSig := handler.ExecuteEffect(effectDef)
-	if resultSig == nil {
-		return // No further state transition needed
+	// 4. Pass effect to Target
+	drivenEvent := target.Execute(effect)
+	if drivenEvent == nil {
+		return
 	}
 
-	// 6. Process result WatcherSig recursively (atomic execution)
-	r.reduceAndExecuteEffect(resultSig, commander, handler)
+	// 5. Process EffectDrivenEvent recursively
+	r.reduceEffectDrivenEvent(drivenEvent, target)
 }
 
-// canProcessUserSig checks if current state can process UserSig.
-func (r *Reducer) canProcessUserSig(state shared.ManagerInnerState) bool {
-	return state == shared.StateReady
+// reduceEffectDrivenEvent processes an EffectDrivenEvent recursively.
+func (r *Reducer) reduceEffectDrivenEvent(event EffectDrivenEvent, target *Target) {
+	prevSnapshot := r.state.Snapshot()
+
+	// 1. Reduce driven event: update ControlState + determine next Effect
+	effect := r.reduceDriven(event)
+
+	// 2. Log
+	action := ReduceAction{
+		PrevState: prevSnapshot,
+		Event:     event,
+		NextState: r.state.Snapshot(),
+	}
+	if r.logger != nil {
+		r.logger.LogReduce(action)
+	}
+
+	// 3. No effect → recursion ends
+	if effect == nil {
+		return
+	}
+
+	// 4. Pass effect to Target
+	drivenEvent := target.Execute(effect)
+	if drivenEvent == nil {
+		return
+	}
+
+	// 5. Continue recursion
+	r.reduceEffectDrivenEvent(drivenEvent, target)
 }
 
-// canProcessVarSig checks if current state can process VarSig.
-func (r *Reducer) canProcessVarSig(state shared.ManagerInnerState) bool {
-	return state == shared.StateReady
+// reduce processes a SemanticEvent: updates ControlState and returns the Effect to execute.
+// This absorbs the former EffectCommander's role.
+func (r *Reducer) reduce(event interface{}) (Effect, *shared.TriggeredSignal) {
+	switch e := event.(type) {
+	case *UserMessageReceived:
+		return r.reduceUserEvent(e)
+	case *wm.DELETED_VarSig:
+		return r.reduceVarEvent(e)
+	case *ControlEvent:
+		return r.reduceControlEvent(e)
+	}
+	return nil, nil
 }
 
-// reduceVarSig handles VarSig according to transition rules.
-// Only called when canProcessVarSig returns true.
-// Logging is handled by reduceAndExecuteEffect.
-// Returns TriggeredSignal with the names of variables that were triggered.
-func (r *Reducer) reduceVarSig(sig *wm.DELETED_VarSig) *shared.TriggeredSignal {
-	currentState := r.state.GetManagerInnerState()
+// reduceUserEvent handles UserMessageReceived.
+func (r *Reducer) reduceUserEvent(event *UserMessageReceived) (Effect, *shared.TriggeredSignal) {
+	r.state.UserState.SetMessage(event.UserMessage)
+	r.state.SetControlState(shared.ControlRunDesired)
 
-	switch currentState {
-	case shared.StateReady:
-		// Batch collect and apply all VarSigs
-		updates := r.collectAndApplyVarSigs(sig)
+	triggeredSig := &shared.TriggeredSignal{IsUserSig: true}
+	return &RunEffect{TriggeredSignal: triggeredSig}, triggeredSig
+}
 
-		// Only transition to Running if there are actual updates
-		if len(updates) > 0 {
-			r.state.VarState.BatchSet(updates)
-			r.state.SetManagerInnerState(shared.StateRunning)
+// reduceVarEvent handles VarSig with batching.
+func (r *Reducer) reduceVarEvent(sig *wm.DELETED_VarSig) (Effect, *shared.TriggeredSignal) {
+	updates := r.collectAndApplyVarSigs(sig)
 
-			// Collect triggered variable names
-			varNames := make([]string, 0, len(updates))
-			for varName := range updates {
-				varNames = append(varNames, varName)
-			}
-			return &shared.TriggeredSignal{VarSigNames: varNames}
+	if len(updates) > 0 {
+		r.state.VarState.BatchSet(updates)
+		r.state.SetControlState(shared.ControlRunDesired)
+
+		varNames := make([]string, 0, len(updates))
+		for varName := range updates {
+			varNames = append(varNames, varName)
 		}
-		// If no updates (all changed=false), stay in Ready state
+		triggeredSig := &shared.TriggeredSignal{VarSigNames: varNames}
+		return &RunEffect{TriggeredSignal: triggeredSig}, triggeredSig
+	}
+
+	return nil, nil
+}
+
+// reduceControlEvent handles external ControlEvents.
+func (r *Reducer) reduceControlEvent(event *ControlEvent) (Effect, *shared.TriggeredSignal) {
+	currentCS := r.state.GetControlState()
+
+	switch event.Kind {
+	case StopRequested:
+		// Already in terminal state? Ignore.
+		if currentCS.IsTerminal() {
+			return nil, nil
+		}
+		r.state.SetControlState(shared.ControlStopDesired)
+		return &CleanupEffect{ForState: shared.ControlStopped}, &shared.TriggeredSignal{IsWatcherSig: true}
+
+	case KillRequested:
+		if currentCS.IsTerminal() {
+			return nil, nil
+		}
+		r.state.SetControlState(shared.ControlKillDesired)
+		return &CleanupEffect{ForState: shared.ControlKilled}, &shared.TriggeredSignal{IsWatcherSig: true}
+
+	case RunRequested:
+		// Only from terminal states
+		if !currentCS.IsTerminal() && currentCS != shared.ControlIdle {
+			return nil, nil
+		}
+		r.state.SetControlState(shared.ControlRunDesired)
+		triggeredSig := &shared.TriggeredSignal{IsWatcherSig: true}
+		return &RunEffect{
+			NeedInit:        event.NeedInit,
+			TriggeredSignal: triggeredSig,
+		}, triggeredSig
+	}
+
+	return nil, nil
+}
+
+// reduceDriven processes an EffectDrivenEvent: updates ControlState and returns next Effect.
+func (r *Reducer) reduceDriven(event EffectDrivenEvent) Effect {
+	switch e := event.(type) {
+	case *ExecutionCompleted:
+		r.state.SetControlState(shared.ControlIdle)
+		return nil // recursion ends: settled at Idle
+
+	case *ErrorSuppressed:
+		r.state.SetControlState(shared.ControlIdle)
+		return nil // recursion ends: settled at Idle
+
+	case *ExecutionFailed:
+		r.state.SetControlState(shared.ControlRecoverDesired)
+		return &RecoverEffect{}
+
+	case *CleanupCompleted:
+		r.state.SetControlState(e.ForState) // terminal state settlement
 		return nil
 
-	default:
-		// Should never reach here due to canProcessVarSig check
-		panic(fmt.Sprintf("reduceVarSig called in invalid state: %s", currentState))
+	case *RecoveryReady:
+		r.state.SetControlState(shared.ControlRunDesired)
+		return &RunEffect{TriggeredSignal: &shared.TriggeredSignal{IsWatcherSig: true}}
+
+	case *RecoveryExhausted:
+		r.state.SetControlState(shared.ControlCrashed)
+		return nil
+
+	case *DirectKilled:
+		r.state.SetControlState(shared.ControlKilled)
+		return nil
+
+	case *DirectCrashed:
+		r.state.SetControlState(shared.ControlCrashed)
+		return nil
 	}
+
+	return nil
+}
+
+// canProcessUserEvent checks if current state can process UserEvent.
+func (r *Reducer) canProcessUserEvent(cs shared.ControlState) bool {
+	return cs == shared.ControlIdle
+}
+
+// canProcessVarEvent checks if current state can process VarSig.
+func (r *Reducer) canProcessVarEvent(cs shared.ControlState) bool {
+	return cs == shared.ControlIdle
 }
 
 // collectAndApplyVarSigs collects all VarSigs and applies them correctly.
@@ -240,7 +321,6 @@ func (r *Reducer) collectAndApplyVarSigs(first *wm.DELETED_VarSig) map[string]sh
 		case sig := <-r.signals.VarSigChan:
 			sigs = append(sigs, sig)
 		default:
-			// break사용이 불가하므로 goto이용.
 			goto APPLY
 		}
 	}
@@ -255,17 +335,15 @@ APPLY:
 	updates := make(map[string]shared.RawWatchValue)
 
 	for varName, varSigs := range byVar {
-		// Check if this variable is state-independent (check first signal)
 		isIndependent := varSigs[0].DELETED_ISStateIndependent
 
 		if isIndependent {
 			// State-independent (Flow): only apply the last signal
 			lastSig := varSigs[len(varSigs)-1]
 
-			// Get current RawHershValue from VarState
 			currentHV, exists := r.state.VarState.Get(varName)
 			if !exists {
-				currentHV = shared.RawWatchValue{} // Empty RawHershValue if not exists
+				currentHV = shared.RawWatchValue{}
 			}
 
 			nextHV := lastSig.DELETED_VarUpdateFunc(currentHV)
@@ -278,116 +356,30 @@ APPLY:
 				continue
 			}
 
-			// Always update since user explicitly sent signal
 			updates[varName] = nextHV
 
 		} else {
 			// State-dependent (Tick): apply all signals sequentially
 			currentHV, exists := r.state.VarState.Get(varName)
 			if !exists {
-				currentHV = shared.RawWatchValue{} // Empty RawHershValue if not exists
+				currentHV = shared.RawWatchValue{}
 			}
 
 			for _, sig := range varSigs {
 				nextHV := sig.DELETED_VarUpdateFunc(currentHV)
 				if nextHV.Error != nil {
-					// VarUpdateFunc execution error - log and store error in RawHershValue
 					if r.logger != nil {
 						r.logger.LogWatchError(varName, ErrorPhaseExecuteComputeFunc, nextHV.Error)
 					}
-					// Store the error
 					currentHV = shared.RawWatchValue{Value: nil, Error: nextHV.Error}
 					continue
 				}
-				currentHV = nextHV // Next function's input
+				currentHV = nextHV
 			}
 
-			// Always update since user explicitly sent signals
 			updates[varName] = currentHV
 		}
 	}
 
 	return updates
-}
-
-// reduceUserSig handles UserSig according to transition rules.
-// Only called when canProcessUserSig returns true.
-// Logging is handled by reduceAndExecuteEffect.
-// Returns TriggeredSignal indicating UserSig was triggered.
-func (r *Reducer) reduceUserSig(sig *UserSig) *shared.TriggeredSignal {
-	currentState := r.state.GetManagerInnerState()
-
-	switch currentState {
-	case shared.StateReady:
-		r.state.UserState.SetMessage(sig.UserMessage)
-		r.state.SetManagerInnerState(shared.StateRunning)
-		return &shared.TriggeredSignal{IsUserSig: true}
-
-	default:
-		// Should never reach here due to canProcessUserSig check
-		panic(fmt.Sprintf("reduceUserSig called in invalid state: %s", currentState))
-	}
-}
-
-// reduceManagerInnerSig handles WatcherSig according to transition rules.
-// Logging is handled by reduceAndExecuteEffect.
-// Returns TriggeredSignal indicating WatcherSig was triggered.
-func (r *Reducer) reduceManagerInnerSig(sig *ManagerInnerSig) *shared.TriggeredSignal {
-	currentState := r.state.GetManagerInnerState()
-	targetState := sig.TargetState
-
-	// Ignore same-state transitions
-	if currentState == targetState {
-		return nil
-	}
-
-	// Validate transition
-	if err := r.validateTransition(currentState, targetState); err != nil {
-		// Log error but don't crash reducer
-		if r.logger != nil {
-			r.logger.LogStateTransitionFault(currentState, targetState, sig.Reason, err)
-		}
-		return nil
-	}
-
-	// Special case: Crashed is terminal
-	if currentState == shared.StateCrashed {
-		if r.logger != nil {
-			r.logger.LogStateTransitionFault(
-				currentState,
-				targetState,
-				sig.Reason,
-				fmt.Errorf("cannot transition from Crashed state"),
-			)
-		}
-		return nil
-	}
-
-	// Perform transition
-	r.state.SetManagerInnerState(targetState)
-	return &shared.TriggeredSignal{IsWatcherSig: true}
-}
-
-// validateTransition checks if a state transition is valid.
-func (r *Reducer) validateTransition(from, to shared.ManagerInnerState) error {
-	// Some basic validation - full FSM rules would go here
-	switch from {
-	case shared.StateStopped:
-		// From Stopped, allow Running (restart), Killed, Crashed, WaitRecover
-		if to != shared.StateRunning && to != shared.StateKilled && to != shared.StateCrashed && to != shared.StateWaitRecover {
-			return fmt.Errorf("invalid transition from Stopped to %s", to)
-		}
-	case shared.StateKilled:
-		// From Killed, allow Running (restart), Crashed, WaitRecover
-		if to != shared.StateRunning && to != shared.StateCrashed && to != shared.StateWaitRecover {
-			return fmt.Errorf("invalid transition from Killed to %s", to)
-		}
-	case shared.StateCrashed:
-		// From Crashed, allow Running (restart) - removed terminal constraint
-		if to != shared.StateRunning {
-			return fmt.Errorf("invalid transition from Crashed to %s", to)
-		}
-	}
-
-	return nil
 }

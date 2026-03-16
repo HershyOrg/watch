@@ -88,11 +88,11 @@ func (sa *signalsAdapter) GetVarSigCount() int {
 }
 
 func (sa *signalsAdapter) GetUserSigCount() int {
-	return len(sa.signals.UserSigChan)
+	return len(sa.signals.UserEventChan)
 }
 
 func (sa *signalsAdapter) GetManagerSigCount() int {
-	return len(sa.signals.ManagerInnerSigChan)
+	return len(sa.signals.ControlEventChan)
 }
 
 func (sa *signalsAdapter) PeekSignals(maxCount int) []api.SignalEntry {
@@ -100,8 +100,8 @@ func (sa *signalsAdapter) PeekSignals(maxCount int) []api.SignalEntry {
 
 	// Peek from each channel (non-blocking read and write back)
 	varCount := len(sa.signals.VarSigChan)
-	userCount := len(sa.signals.UserSigChan)
-	watcherCount := len(sa.signals.ManagerInnerSigChan)
+	userCount := len(sa.signals.UserEventChan)
+	watcherCount := len(sa.signals.ControlEventChan)
 
 	// Distribute maxCount across channels proportionally
 	varLimit := min(varCount, maxCount/3)
@@ -127,13 +127,13 @@ func (sa *signalsAdapter) PeekSignals(maxCount int) []api.SignalEntry {
 	// Peek UserSig
 	for i := 0; i < userLimit && i < userCount; i++ {
 		select {
-		case sig := <-sa.signals.UserSigChan:
+		case sig := <-sa.signals.UserEventChan:
 			entries = append(entries, api.SignalEntry{
 				Type:      "user",
 				Content:   sig.String(),
 				CreatedAt: sig.CreatedAt(),
 			})
-			sa.signals.UserSigChan <- sig
+			sa.signals.UserEventChan <- sig
 		default:
 			break
 		}
@@ -142,13 +142,13 @@ func (sa *signalsAdapter) PeekSignals(maxCount int) []api.SignalEntry {
 	// Peek WatcherSig
 	for i := 0; i < watcherLimit && i < watcherCount; i++ {
 		select {
-		case sig := <-sa.signals.ManagerInnerSigChan:
+		case sig := <-sa.signals.ControlEventChan:
 			entries = append(entries, api.SignalEntry{
 				Type:      "watcher",
 				Content:   sig.String(),
 				CreatedAt: sig.CreatedAt(),
 			})
-			sa.signals.ManagerInnerSigChan <- sig
+			sa.signals.ControlEventChan <- sig
 		default:
 			break
 		}

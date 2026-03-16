@@ -6,52 +6,108 @@ import (
 	"time"
 )
 
-// ManagerInnerState represents the internal state of the Manager.
-// States form a finite state machine with specific transition rules.
-// This is the core state that drives the reactive execution engine.
-type ManagerInnerState uint8
+// ControlState represents the Manager's control intent over the Target.
+// SemanticEvent → Desired state → recursive Effect loop → Terminal state.
+type ControlState uint8
 
 const (
-	// StateReady indicates the Manager is ready to execute on next signal
-	StateReady ManagerInnerState = iota
-	// StateRunning indicates the Manager is currently executing
-	StateRunning
-	// StateStopped indicates the Manager stopped normally and can be restarted
-	StateStopped
-	// StateKilled indicates the Manager was killed and is permanently stopped
-	StateKilled
-	// StateCrashed indicates the Manager crashed irrecoverably
-	StateCrashed
-	// StateWaitRecover indicates the Manager is waiting for recovery decision
-	StateWaitRecover
+	// ControlIdle indicates the Manager is idle and ready to accept events
+	ControlIdle ControlState = iota
+	// ControlRunDesired indicates execution is requested (UserMsg/VarChange)
+	ControlRunDesired
+	// ControlStopDesired indicates stop is requested
+	ControlStopDesired
+	// ControlKillDesired indicates kill is requested
+	ControlKillDesired
+	// ControlRecoverDesired indicates recovery is requested
+	ControlRecoverDesired
+
+	// Terminal states (settled after recursive loop completes)
+
+	// ControlStopped indicates the Target has stopped
+	ControlStopped
+	// ControlKilled indicates the Target has been killed
+	ControlKilled
+	// ControlCrashed indicates the Target has crashed
+	ControlCrashed
 )
 
-func (s ManagerInnerState) String() string {
+func (s ControlState) String() string {
 	switch s {
-	case StateReady:
-		return "Ready"
-	case StateRunning:
-		return "Running"
-	case StateStopped:
+	case ControlIdle:
+		return "Idle"
+	case ControlRunDesired:
+		return "RunDesired"
+	case ControlStopDesired:
+		return "StopDesired"
+	case ControlKillDesired:
+		return "KillDesired"
+	case ControlRecoverDesired:
+		return "RecoverDesired"
+	case ControlStopped:
 		return "Stopped"
-	case StateKilled:
+	case ControlKilled:
 		return "Killed"
-	case StateCrashed:
+	case ControlCrashed:
 		return "Crashed"
-	case StateWaitRecover:
-		return "WaitRecover"
 	default:
 		return "Unknown"
 	}
 }
 
-// SignalPriority defines the priority order for signal processing.
+// IsTerminal returns true if this is a terminal state.
+func (s ControlState) IsTerminal() bool {
+	return s == ControlStopped || s == ControlKilled || s == ControlCrashed
+}
+
+// TargetState represents the Target's own actual execution state.
+type TargetState uint8
+
+const (
+	// TargetIdle indicates the Target is not doing anything
+	TargetIdle TargetState = iota
+	// TargetRunning indicates the Target is executing the ManagedFunc
+	TargetRunning
+	// TargetCleaningUp indicates the Target is running cleanup
+	TargetCleaningUp
+	// TargetSleeping indicates the Target is in backoff/delay
+	TargetSleeping
+	// TargetStopped indicates the Target has stopped
+	TargetStopped
+	// TargetKilled indicates the Target has been killed
+	TargetKilled
+	// TargetCrashed indicates the Target has crashed
+	TargetCrashed
+)
+
+func (s TargetState) String() string {
+	switch s {
+	case TargetIdle:
+		return "Idle"
+	case TargetRunning:
+		return "Running"
+	case TargetCleaningUp:
+		return "CleaningUp"
+	case TargetSleeping:
+		return "Sleeping"
+	case TargetStopped:
+		return "Stopped"
+	case TargetKilled:
+		return "Killed"
+	case TargetCrashed:
+		return "Crashed"
+	default:
+		return "Unknown"
+	}
+}
+
+// SignalPriority defines the priority order for event processing.
 // Lower numeric values indicate higher priority.
 type SignalPriority uint8
 
 const (
-	// PriorityManagerInner is the highest priority (Watcher state control)
-	PriorityManagerInner SignalPriority = 0
+	// PriorityControl is the highest priority (control events)
+	PriorityControl SignalPriority = 0
 	// PriorityUser is medium priority (user messages)
 	PriorityUser SignalPriority = 1
 	// PriorityVar is the lowest priority (watched variable changes)

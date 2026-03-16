@@ -67,7 +67,7 @@ func DELELTED_WatchCall[T any](
 		mgr.GetState().VarState.Set(varName, initialRaw)
 
 		// Register and start watching - use Manager's EffectHandler rootCtx
-		ctx, cancel := context.WithCancel(mgr.GetEffectHandler().GetRootContext())
+		ctx, cancel := context.WithCancel(mgr.GetTarget().GetRootContext())
 
 		// Wrap user's generic function into raw function for internal use
 		wrappedGetFunc := func() (wm.DELETED_RawVarUpdateFunc, bool, error) {
@@ -245,7 +245,7 @@ func DELETED_WatchFlow[T any](
 
 		// Register and start watching
 		// Create channel lifecycle context - use Manager's EffectHandler rootCtx
-		flowCtx, cancel := context.WithCancel(mgr.GetEffectHandler().GetRootContext())
+		flowCtx, cancel := context.WithCancel(mgr.GetTarget().GetRootContext())
 
 		// Wrap user's generic channel into raw channel for internal use
 		rawGetChanFunc := func(ctx context.Context) (<-chan shared.RawFlowValue, error) {

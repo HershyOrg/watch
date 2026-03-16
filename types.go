@@ -7,15 +7,15 @@ import (
 
 // Re-export core types for convenience
 type (
-	ManagerInnerState = shared.ManagerInnerState
-	SignalPriority    = shared.SignalPriority
-	Signal            = shared.Signal
-	ManageContext     = shared.ManageContext
-	Message           = shared.Message
-	WatcherConfig     = shared.WatcherConfig
-	RecoveryPolicy    = shared.RecoveryPolicy
-	// HershValue is now generic: use shared.HershValue[T] directly
-	// FlowValue is now generic: use shared.FlowValue[T] directly
+	ControlState = shared.ControlState
+	TargetState  = shared.TargetState
+
+	SignalPriority = shared.SignalPriority
+	Signal         = shared.Signal
+	ManageContext  = shared.ManageContext
+	Message        = shared.Message
+	WatcherConfig  = shared.WatcherConfig
+	RecoveryPolicy = shared.RecoveryPolicy
 
 	// Error types
 	ControlError           = shared.ControlError
@@ -27,21 +27,22 @@ type (
 
 // VarUpdateFunc is a function that updates a variable's state.
 // DEPRECATED: This type is no longer used. Use manager.VarUpdateFunc instead.
-// It takes the previous state and returns the next state, a boolean indicating if the state changed, and an error.
 type VarUpdateFunc func(prev any) (next any, changed bool, err error)
 
-// Re-export constants
+// Re-export ControlState constants
 const (
-	StateReady       = shared.StateReady
-	StateRunning     = shared.StateRunning
-	StateStopped     = shared.StateStopped
-	StateKilled      = shared.StateKilled
-	StateCrashed     = shared.StateCrashed
-	StateWaitRecover = shared.StateWaitRecover
+	ControlIdle           = shared.ControlIdle
+	ControlRunDesired     = shared.ControlRunDesired
+	ControlStopDesired    = shared.ControlStopDesired
+	ControlKillDesired    = shared.ControlKillDesired
+	ControlRecoverDesired = shared.ControlRecoverDesired
+	ControlStopped        = shared.ControlStopped
+	ControlKilled         = shared.ControlKilled
+	ControlCrashed        = shared.ControlCrashed
 
-	PriorityManagerInner = shared.PriorityManagerInner
-	PriorityUser         = shared.PriorityUser
-	PriorityVar          = shared.PriorityVar
+	PriorityControl = shared.PriorityControl
+	PriorityUser    = shared.PriorityUser
+	PriorityVar     = shared.PriorityVar
 )
 
 // Re-export functions

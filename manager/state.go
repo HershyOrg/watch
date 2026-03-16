@@ -7,7 +7,7 @@ import (
 )
 
 // VarState holds the state of all watched variables.
-// map[varName]RawHershValue (internal non-generic storage)
+// map[varName]RawWatchValue (internal non-generic storage)
 type VarState struct {
 	mu     sync.RWMutex
 	values map[string]shared.RawWatchValue
@@ -20,7 +20,7 @@ func NewVarState() *VarState {
 	}
 }
 
-// Get retrieves a variable's RawHershValue.
+// Get retrieves a variable's RawWatchValue.
 func (vs *VarState) Get(name string) (shared.RawWatchValue, bool) {
 	vs.mu.RLock()
 	defer vs.mu.RUnlock()
@@ -28,7 +28,7 @@ func (vs *VarState) Get(name string) (shared.RawWatchValue, bool) {
 	return val, ok
 }
 
-// Set updates a variable's RawHershValue.
+// Set updates a variable's RawWatchValue.
 func (vs *VarState) Set(name string, value shared.RawWatchValue) {
 	vs.mu.Lock()
 	defer vs.mu.Unlock()
@@ -102,48 +102,47 @@ func (us *UserState) ConsumeMessage() *shared.Message {
 
 // ManagerState holds all state managed by the Manager.
 type ManagerState struct {
-	VarState          *VarState
-	UserState         *UserState
-	ManagerInnerState shared.ManagerInnerState
-	mu                sync.RWMutex
+	VarState     *VarState
+	UserState    *UserState
+	ControlState shared.ControlState
+	mu           sync.RWMutex
 }
 
-// NewManagerState creates a new ManagerState with initial ManagerInnerState.
-func NewManagerState(initialState shared.ManagerInnerState) *ManagerState {
+// NewManagerState creates a new ManagerState with initial ControlState.
+func NewManagerState(initialState shared.ControlState) *ManagerState {
 	return &ManagerState{
-		VarState:          NewVarState(),
-		UserState:         NewUserState(),
-		ManagerInnerState: initialState,
+		VarState:     NewVarState(),
+		UserState:    NewUserState(),
+		ControlState: initialState,
 	}
 }
 
-// GetManagerInnerState returns the current ManagerInnerState.
-func (ms *ManagerState) GetManagerInnerState() shared.ManagerInnerState {
+// GetControlState returns the current ControlState.
+func (ms *ManagerState) GetControlState() shared.ControlState {
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
-	return ms.ManagerInnerState
+	return ms.ControlState
 }
 
-// SetManagerInnerState updates the ManagerInnerState.
-func (ms *ManagerState) SetManagerInnerState(state shared.ManagerInnerState) {
+// SetControlState updates the ControlState.
+func (ms *ManagerState) SetControlState(state shared.ControlState) {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
-
-	ms.ManagerInnerState = state
+	ms.ControlState = state
 }
 
-// Snapshot returns a complete state snapshot for logging.
+// StateSnapshot returns a complete state snapshot for logging.
 type StateSnapshot struct {
-	VarState          map[string]shared.RawWatchValue
-	UserMessage       *shared.Message
-	ManagerInnerState shared.ManagerInnerState
+	VarState     map[string]shared.RawWatchValue
+	UserMessage  *shared.Message
+	ControlState shared.ControlState
 }
 
 // Snapshot creates a snapshot of all state.
 func (ms *ManagerState) Snapshot() StateSnapshot {
 	return StateSnapshot{
-		VarState:          ms.VarState.GetAll(),
-		UserMessage:       ms.UserState.GetMessage(),
-		ManagerInnerState: ms.GetManagerInnerState(),
+		VarState:     ms.VarState.GetAll(),
+		UserMessage:  ms.UserState.GetMessage(),
+		ControlState: ms.GetControlState(),
 	}
 }

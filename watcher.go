@@ -56,8 +56,7 @@ func NewWatcher(config WatcherConfig, parentCtx context.Context) *Watcher {
 		rootCancel: cancel,
 	}
 
-	// 🎯 Auto-shutdown goroutine: monitors parent context
-	// When parent context is cancelled, automatically stops the watcher
+	// Auto-shutdown goroutine: monitors parent context
 	go func() {
 		<-parentCtx.Done()
 
@@ -75,12 +74,10 @@ func NewWatcher(config WatcherConfig, parentCtx context.Context) *Watcher {
 
 		select {
 		case err := <-stopDone:
-			// Stop completed
 			if err != nil {
 				fmt.Printf("[Watcher] Stop error: %v\n", err)
 			}
 		case <-time.After(5 * time.Minute):
-			// Stop() blocked for 5 minutes - force shutdown
 			fmt.Println("[Watcher] Stop timeout (5 min), forcing shutdown...")
 			w.forceShutdown()
 		}
@@ -90,20 +87,15 @@ func NewWatcher(config WatcherConfig, parentCtx context.Context) *Watcher {
 }
 
 // Manage registers a function to be managed by the Watcher.
-// Creates a new Manager with the managed function and environment variables.
-// envVars are injected into ManageContext. If nil, an empty map is used.
-// Returns a manager.CleanupBuilder for optional cleanup registration.
 func (w *Watcher) Manage(fn manager.ManagedFunc, name string, envVars map[string]string) *manager.CleanupBuilder {
 	if w.isRunning.Load() {
 		panic("cannot call Manage after Watcher is already running")
 	}
 
-	// Wrap the managed function
 	wrappedFn := func(msg *Message, ctx ManageContext) error {
 		return fn(msg, ctx)
 	}
 
-	// Create complete Manager with ManagedFunc and envVars
 	w.manager = manager.NewManager(
 		w.config,
 		wrappedFn,
@@ -111,19 +103,17 @@ func (w *Watcher) Manage(fn manager.ManagedFunc, name string, envVars map[string
 		envVars,
 	)
 
-	// Return CleanupBuilder from manager package
 	return manager.NewCleanupBuilder(w.manager)
 }
 
 // Start begins the Watcher's execution.
-// It starts all Manager components and triggers the first execution to register Watch variables.
 func (w *Watcher) Start() error {
 	if !w.isRunning.CompareAndSwap(false, true) {
 		return fmt.Errorf("watcher already running")
 	}
 
 	if w.manager == nil {
-		w.isRunning.Store(false) // Reset on error
+		w.isRunning.Store(false)
 		return fmt.Errorf("no managed function registered")
 	}
 
@@ -137,9 +127,8 @@ func (w *Watcher) Start() error {
 	}
 	w.apiServer = apiServer
 
-	// Send an initial empty UserSig to trigger first execution
-	// This allows the managed function to register Watch variables
-	w.manager.GetSignals().SendUserSig(&manager.UserSig{
+	// Send an initial empty UserEvent to trigger first execution
+	w.manager.GetSignals().SendUserEvent(&manager.UserMessageReceived{
 		ReceivedTime: time.Now(),
 		UserMessage:  nil, // Empty message for initialization
 	})
@@ -154,10 +143,9 @@ func (w *Watcher) Stop() error {
 	}
 
 	// Check if Manager is already in a terminal state
-	// This handles cases where StopError/KillError automatically stopped the Manager
-	currentState := w.manager.GetState().GetManagerInnerState()
-	if currentState == StateStopped || currentState == StateKilled || currentState == StateCrashed {
-		// Already stopped - just clean up Watcher resources including API server
+	currentState := w.manager.GetState().GetControlState()
+	if currentState.IsTerminal() {
+		// Already stopped - just clean up Watcher resources
 		if w.apiServer != nil {
 			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer shutdownCancel()
@@ -170,15 +158,14 @@ func (w *Watcher) Stop() error {
 		return nil
 	}
 
-	// Send Stop signal
-	w.manager.GetSignals().SendManagerInnerSig(&manager.ManagerInnerSig{
+	// Send Stop control event
+	w.manager.GetSignals().SendControlEvent(&manager.ControlEvent{
 		ReceivedTime: time.Now(),
-		TargetState:  StateStopped,
+		Kind:         manager.StopRequested,
 		Reason:       "user requested stop",
 	})
 
-	// Wait for cleanup completion and Stopped state using polling
-	// Poll every 500ms for up to 60 seconds
+	// Wait for cleanup completion and terminal state using polling
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 	timeout := time.After(300 * time.Second)
@@ -186,31 +173,24 @@ func (w *Watcher) Stop() error {
 	for {
 		select {
 		case <-ticker.C:
-			// Check if cleanup is completed AND Manager reached Stopped state
-			if (w.manager.GetState().GetManagerInnerState() == StateStopped ||
-				w.manager.GetState().GetManagerInnerState() == StateCrashed ||
-				w.manager.GetState().GetManagerInnerState() == StateKilled) &&
-				w.manager.GetEffectHandler().IsCleanupCompleted() {
-				// Both conditions met, exit polling loop
+			cs := w.manager.GetState().GetControlState()
+			if cs.IsTerminal() && w.manager.GetTarget().IsCleanupCompleted() {
 				goto StopCompleted
 			}
 		case <-timeout:
-			// Timeout after 60 seconds
 			return fmt.Errorf("stop timeout: cleanup and state transition not completed within 60 seconds")
 		}
 	}
 
 StopCompleted:
-	// 3. Shutdown API server
+	// Shutdown API server
 	if w.apiServer != nil {
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer shutdownCancel()
 
 		if err := w.apiServer.Shutdown(shutdownCtx); err != nil {
-			// Check if timeout occurred
 			if errors.Is(err, context.DeadlineExceeded) {
 				fmt.Println("[Watcher] API server shutdown timeout (5s), forcing close...")
-				// Force close
 				if closeErr := w.apiServer.Close(); closeErr != nil {
 					fmt.Printf("[Watcher] API server force close error: %v\n", closeErr)
 				} else {
@@ -222,10 +202,10 @@ StopCompleted:
 		} else {
 			fmt.Println("[Watcher] API server stopped gracefully")
 		}
-		w.apiServer = nil // Clear reference
+		w.apiServer = nil
 	}
 
-	// 4. Finalize Watcher shutdown
+	// Finalize Watcher shutdown
 	w.stopAllWatches()
 	w.rootCancel()
 	w.isRunning.Store(false)
@@ -234,27 +214,19 @@ StopCompleted:
 }
 
 // forceShutdown forcefully terminates the Watcher (last resort).
-// Called when Stop() times out after 5 minutes.
-// This bypasses normal cleanup and immediately shuts down all components.
 func (w *Watcher) forceShutdown() {
 	fmt.Println("[Watcher] Force shutdown initiated...")
 
-	// Cancel all contexts immediately
 	w.rootCancel()
-
-	// Force stop all watch goroutines
 	w.stopAllWatches()
 
-	// Force close API server without graceful shutdown
 	if w.apiServer != nil {
 		if err := w.apiServer.Close(); err != nil {
 			fmt.Printf("[Watcher] Force close API server error: %v\n", err)
 		}
 	}
 
-	// Mark as stopped
 	w.isRunning.Store(false)
-
 	fmt.Println("[Watcher] Force shutdown complete")
 }
 
@@ -270,7 +242,7 @@ func (w *Watcher) SendMessage(content string) error {
 		ReceivedAt: time.Now(),
 	}
 
-	w.manager.GetSignals().SendUserSig(&manager.UserSig{
+	w.manager.GetSignals().SendUserEvent(&manager.UserMessageReceived{
 		ReceivedTime: time.Now(),
 		UserMessage:  msg,
 	})
@@ -278,9 +250,9 @@ func (w *Watcher) SendMessage(content string) error {
 	return nil
 }
 
-// GetState returns the current WatcherState.
-func (w *Watcher) GetState() ManagerInnerState {
-	return w.manager.GetState().GetManagerInnerState()
+// GetState returns the current ControlState.
+func (w *Watcher) GetState() ControlState {
+	return w.manager.GetState().GetControlState()
 }
 
 // GetLogger returns the Watcher's logger for inspection.
@@ -289,68 +261,59 @@ func (w *Watcher) GetLogger() *manager.Logger {
 }
 
 // StopManager stops the Manager (enters Stopped state).
-// This does NOT stop the Watcher itself - only the managed function execution.
-// The Manager can be restarted with RunManager().
 func (w *Watcher) StopManager() error {
 	if !w.isRunning.Load() {
 		return fmt.Errorf("watcher not running")
 	}
 
-	// Check if Manager is already in a terminal state
-	currentState := w.manager.GetState().GetManagerInnerState()
-	if currentState == StateStopped || currentState == StateKilled || currentState == StateCrashed {
+	currentState := w.manager.GetState().GetControlState()
+	if currentState.IsTerminal() {
 		return nil // Already stopped
 	}
 
-	// Send Stop signal without NeedInit
-	w.manager.GetSignals().SendManagerInnerSig(&manager.ManagerInnerSig{
+	w.manager.GetSignals().SendControlEvent(&manager.ControlEvent{
 		ReceivedTime: time.Now(),
-		TargetState:  StateStopped,
+		Kind:         manager.StopRequested,
 		Reason:       "user requested manager stop",
-		NeedInit:     false,
 	})
 
-	// Wait for Stopped state using polling
-	return w.waitForState(StateStopped, 60*time.Second)
+	return w.waitForTerminalState(60 * time.Second)
 }
 
-// RunManager restarts the Manager from a terminal state (Stopped/Killed/Crashed → Running).
-// This triggers reinitialization and executes the managed function again.
-// Returns error if Manager is not in a terminal state.
+// RunManager restarts the Manager from a terminal state.
 func (w *Watcher) RunManager() error {
 	if !w.isRunning.Load() {
 		return fmt.Errorf("watcher not running")
 	}
 
-	currentState := w.manager.GetState().GetManagerInnerState()
-	if currentState != StateStopped && currentState != StateKilled && currentState != StateCrashed {
-		return fmt.Errorf("can only run from terminal states (Stopped/Killed/Crashed), current: %s", currentState)
+	currentState := w.manager.GetState().GetControlState()
+	if !currentState.IsTerminal() {
+		return fmt.Errorf("can only run from terminal states, current: %s", currentState)
 	}
 
-	// Send Running signal with NeedInit=true for reinitialization
-	w.manager.GetSignals().SendManagerInnerSig(&manager.ManagerInnerSig{
+	// Send RunRequested control event with NeedInit
+	w.manager.GetSignals().SendControlEvent(&manager.ControlEvent{
 		ReceivedTime: time.Now(),
-		TargetState:  StateRunning,
-		Reason:       "user requested manager restart",
+		Kind:         manager.RunRequested,
 		NeedInit:     true,
+		Reason:       "user requested manager restart",
 	})
 
-	// Wait for state transition to complete (Running → Ready)
-	// Give it time to process the signal and initialize
+	// Wait for state transition
 	time.Sleep(100 * time.Millisecond)
 
-	// Trigger first execution (like InitRun) with empty message
-	w.manager.GetSignals().SendUserSig(&manager.UserSig{
+	// Trigger first execution with empty message
+	w.manager.GetSignals().SendUserEvent(&manager.UserMessageReceived{
 		ReceivedTime: time.Now(),
 		UserMessage:  nil,
 	})
 
-	// Wait for Ready state
-	return w.waitForState(StateReady, 60*time.Second)
+	// Wait for Idle state
+	return w.waitForState(ControlIdle, 60*time.Second)
 }
 
-// waitForState waits for Manager to reach the target state using polling.
-func (w *Watcher) waitForState(targetState ManagerInnerState, timeout time.Duration) error {
+// waitForState waits for Manager to reach the target ControlState.
+func (w *Watcher) waitForState(targetState ControlState, timeout time.Duration) error {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	deadline := time.After(timeout)
@@ -358,20 +321,38 @@ func (w *Watcher) waitForState(targetState ManagerInnerState, timeout time.Durat
 	for {
 		select {
 		case <-ticker.C:
-			currentState := w.manager.GetState().GetManagerInnerState()
+			currentState := w.manager.GetState().GetControlState()
 			if currentState == targetState {
 				return nil
 			}
-			// Check for unexpected terminal states
-			if targetState != StateCrashed && currentState == StateCrashed {
+			if targetState != ControlCrashed && currentState == ControlCrashed {
 				return fmt.Errorf("manager crashed while waiting for state %s", targetState)
 			}
-			if targetState != StateKilled && currentState == StateKilled {
+			if targetState != ControlKilled && currentState == ControlKilled {
 				return fmt.Errorf("manager killed while waiting for state %s", targetState)
 			}
 		case <-deadline:
-			currentState := w.manager.GetState().GetManagerInnerState()
+			currentState := w.manager.GetState().GetControlState()
 			return fmt.Errorf("timeout waiting for state %s (current: %s)", targetState, currentState)
+		}
+	}
+}
+
+// waitForTerminalState waits for Manager to reach any terminal ControlState.
+func (w *Watcher) waitForTerminalState(timeout time.Duration) error {
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	deadline := time.After(timeout)
+
+	for {
+		select {
+		case <-ticker.C:
+			if w.manager.GetState().GetControlState().IsTerminal() {
+				return nil
+			}
+		case <-deadline:
+			currentState := w.manager.GetState().GetControlState()
+			return fmt.Errorf("timeout waiting for terminal state (current: %s)", currentState)
 		}
 	}
 }
@@ -392,10 +373,9 @@ func (w *Watcher) stopAllWatches() {
 			}
 		}(handle)
 
-		return true // continue iteration
+		return true
 	})
 
-	// Wait for all watches to stop with 1 minute timeout
 	done := make(chan struct{})
 	go func() {
 		wg.Wait()

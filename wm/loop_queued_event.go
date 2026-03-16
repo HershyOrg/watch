@@ -6,6 +6,9 @@ import (
 	"github.com/HershyOrg/watch/shared"
 )
 
+// loop_queued_event.go는, loop에 대한 외부 주입-의미가 있는 이벤트임
+//해당 이벤트는 리듀서의 이벤트 큐에 큐잉됨
+
 // LoopEvent는 WatchMachine상에서 발생하는,
 // Loop를 위한 이벤트임.
 type LoopEvent interface {
@@ -20,7 +23,7 @@ type LoopGotErrFromUpdateFunc struct {
 	Err           error
 }
 
-func (lw *LoopGotErrFromUpdateFunc) LoopEvent(){}
+func (lw *LoopGotErrFromUpdateFunc) LoopEvent() {}
 
 // LoopGotErrFromGetHandle는 Loop가 Handle을 얻지 못한 사건이다.
 type LoopGotErrFromGetHandle struct {
@@ -29,7 +32,7 @@ type LoopGotErrFromGetHandle struct {
 	GetFlowHandleFuncOrNil    GetRawFlowHandleFunc
 }
 
-func (lg *LoopGotErrFromGetHandle) LoopEvent(){}
+func (lg *LoopGotErrFromGetHandle) LoopEvent() {}
 
 // WmCheckedAllSubscribers 는 WatchMachine이 자신의 구독자들 상태를
 // GC루틴으로 체크한 사건이다.
@@ -39,7 +42,7 @@ type WmCheckedAllSubscribers struct {
 	SubscribersWithState []SubscriberWithState
 }
 
-func (wc *WmCheckedAllSubscribers) LoopEvent(){}
+func (wc *WmCheckedAllSubscribers) LoopEvent() {}
 
 // WmCheckedAllPublishers는 WatchMachine이 자신의 발행자들 상태를
 // PbChecker루틴으로 체크한 사건이다.
@@ -49,18 +52,18 @@ type WmCheckedAllPublishers struct {
 	PublishersWithState []PublisherWithState
 }
 
-func (wc *WmCheckedAllPublishers) LoopEvent(){}
+func (wc *WmCheckedAllPublishers) LoopEvent() {}
 
 // SubscriberWithState는 구독자와 그 상태이다.
 type SubscriberWithState struct {
 	CheckedTime time.Time
-	State       shared.ManagerInnerState
+	State       shared.ControlState
 	Subscriber  Subscriber
 }
 
 // SubscriberWithState는 발행자와 그 상태이다.
 type PublisherWithState struct {
 	CheckedTime time.Time
-	State       shared.ManagerInnerState
+	State       shared.ControlState
 	Subscriber  Publisher
 }
