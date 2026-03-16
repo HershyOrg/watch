@@ -71,7 +71,6 @@ func NewManager(
 	target := NewTarget(
 		managedFunc,
 		cleaner,
-		state.UserState,
 		logger,
 		config,
 	)

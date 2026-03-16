@@ -16,7 +16,8 @@ type Effect interface {
 // RunEffect tells the Target to execute the ManagedFunc.
 type RunEffect struct {
 	TriggeredSignal *shared.TriggeredSignal
-	NeedInit        bool // Whether initialization is needed (restart scenarios)
+	NeedInit        bool            // Whether initialization is needed (restart scenarios)
+	Message         *shared.Message // User message (nil for VarSig/Control triggers)
 }
 
 func (e *RunEffect) effectMarker() {}

@@ -13,6 +13,7 @@ import (
 type ReduceAction struct {
 	PrevState       StateSnapshot
 	Event           interface{} // SemanticEvent or EffectDrivenEvent
+	Effect          Effect      // Effect determined by Reduce (nil if no effect)
 	NextState       StateSnapshot
 	TriggeredSignal *shared.TriggeredSignal
 }
@@ -128,6 +129,7 @@ func (r *Reducer) reduceAndExecute(event interface{}, target *Target) {
 	action := ReduceAction{
 		PrevState:       prevSnapshot,
 		Event:           event,
+		Effect:          effect,
 		NextState:       r.state.Snapshot(),
 		TriggeredSignal: triggeredSig,
 	}
@@ -161,6 +163,7 @@ func (r *Reducer) reduceEffectDrivenEvent(event EffectDrivenEvent, target *Targe
 	action := ReduceAction{
 		PrevState: prevSnapshot,
 		Event:     event,
+		Effect:    effect,
 		NextState: r.state.Snapshot(),
 	}
 	if r.logger != nil {
@@ -198,11 +201,10 @@ func (r *Reducer) reduce(event interface{}) (Effect, *shared.TriggeredSignal) {
 
 // reduceUserEvent handles UserMessageReceived.
 func (r *Reducer) reduceUserEvent(event *UserMessageReceived) (Effect, *shared.TriggeredSignal) {
-	r.state.UserState.SetMessage(event.UserMessage)
 	r.state.SetControlState(shared.ControlRunDesired)
 
 	triggeredSig := &shared.TriggeredSignal{IsUserSig: true}
-	return &RunEffect{TriggeredSignal: triggeredSig}, triggeredSig
+	return &RunEffect{TriggeredSignal: triggeredSig, Message: event.UserMessage}, triggeredSig
 }
 
 // reduceVarEvent handles VarSig with batching.

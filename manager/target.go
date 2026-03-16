@@ -42,14 +42,12 @@ type Target struct {
 	cleanupCompleted bool
 	manager          *Manager
 	logger           EffectLogger
-	userState        *UserState
 }
 
 // NewTarget creates a new Target.
 func NewTarget(
 	managedFunc ManagedFunc,
 	cleaner Cleaner,
-	userState *UserState,
 	logger EffectLogger,
 	config shared.WatcherConfig,
 ) *Target {
@@ -60,7 +58,6 @@ func NewTarget(
 		state:            shared.TargetIdle,
 		managedFunc:      managedFunc,
 		cleaner:          cleaner,
-		userState:        userState,
 		logger:           logger,
 		config:           config,
 		rootCtx:          bgCtx,
@@ -195,8 +192,8 @@ func (t *Target) executeRun(effect *RunEffect) (*EffectResult, EffectDrivenEvent
 	execCtx, cancel := context.WithTimeout(t.rootCtx, t.config.DefaultTimeout)
 	defer cancel()
 
-	// Consume message
-	msg := t.userState.ConsumeMessage()
+	// Get message from effect
+	msg := effect.Message
 
 	// Update persistent ManageContext
 	t.manageCtx.UpdateContext(execCtx)

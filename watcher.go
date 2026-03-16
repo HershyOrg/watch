@@ -238,7 +238,6 @@ func (w *Watcher) SendMessage(content string) error {
 
 	msg := &Message{
 		Content:    content,
-		IsConsumed: false,
 		ReceivedAt: time.Now(),
 	}
 

@@ -125,7 +125,6 @@ type Signal interface {
 // Message represents a user-sent message to a managed function.
 type Message struct {
 	Content    string
-	IsConsumed bool
 	ReceivedAt time.Time
 }
 

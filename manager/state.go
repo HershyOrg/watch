@@ -62,48 +62,9 @@ func (vs *VarState) Clear() {
 	vs.values = make(map[string]shared.RawWatchValue)
 }
 
-// UserState holds the current user message state.
-type UserState struct {
-	mu      sync.RWMutex
-	message *shared.Message
-}
-
-// NewUserState creates a new UserState.
-func NewUserState() *UserState {
-	return &UserState{}
-}
-
-// GetMessage retrieves the current message.
-func (us *UserState) GetMessage() *shared.Message {
-	us.mu.RLock()
-	defer us.mu.RUnlock()
-	return us.message
-}
-
-// SetMessage updates the current message.
-func (us *UserState) SetMessage(msg *shared.Message) {
-	us.mu.Lock()
-	defer us.mu.Unlock()
-	us.message = msg
-}
-
-// ConsumeMessage marks the message as consumed and returns it.
-func (us *UserState) ConsumeMessage() *shared.Message {
-	us.mu.Lock()
-	defer us.mu.Unlock()
-	if us.message != nil {
-		us.message.IsConsumed = true
-		msg := us.message
-		us.message = nil
-		return msg
-	}
-	return nil
-}
-
 // ManagerState holds all state managed by the Manager.
 type ManagerState struct {
 	VarState     *VarState
-	UserState    *UserState
 	ControlState shared.ControlState
 	mu           sync.RWMutex
 }
@@ -112,7 +73,6 @@ type ManagerState struct {
 func NewManagerState(initialState shared.ControlState) *ManagerState {
 	return &ManagerState{
 		VarState:     NewVarState(),
-		UserState:    NewUserState(),
 		ControlState: initialState,
 	}
 }
@@ -134,7 +94,6 @@ func (ms *ManagerState) SetControlState(state shared.ControlState) {
 // StateSnapshot returns a complete state snapshot for logging.
 type StateSnapshot struct {
 	VarState     map[string]shared.RawWatchValue
-	UserMessage  *shared.Message
 	ControlState shared.ControlState
 }
 
@@ -142,7 +101,6 @@ type StateSnapshot struct {
 func (ms *ManagerState) Snapshot() StateSnapshot {
 	return StateSnapshot{
 		VarState:     ms.VarState.GetAll(),
-		UserMessage:  ms.UserState.GetMessage(),
 		ControlState: ms.GetControlState(),
 	}
 }
