@@ -15,10 +15,18 @@ type WatchMachine struct {
 	GetRawFlowHandleOrNil GetRawFlowHandleFunc
 
 	//reduce-effect엔진
-	loopReducer       LoopReducerInterface
-	loopEffectHandler LoopEffectHandlerInferface
+	loopReducer LoopReducerInterface
 	//loop의 상태-조작을 reducer-effect가 담당-지시함.
+	//Loop는 Manager의 MgrFuncRunner(=Target)와 동일한 역할임.
 	loop WatchLoopInterface
+
+	//currentLoopState는 Loop의 현재 상태임.
+	//Reducer가 순수 함수이므로, WatchMachine이 state를 보관함.
+	currentLoopState LoopState
+
+	//loopHistory는 watchMachine의 관측기록을 나타낸다.
+	//이론상으론 무한 길이 배열이지만, 성능 상 3만 길이 배열을 윈도잉한다.
+	loopHistory LoopHistory
 
 	//loopCtxConfig로 WatchMachine의 생명주기-타임아웃 결정
 	loopCtxConfig LoopContextConfig
@@ -33,6 +41,10 @@ type WatchMachine struct {
 	//현재는 신경쓰지 않으며, 당장은 빈 리스트로 둚.
 	PublishersOrNil []Publisher
 
+	//MachineRegistry에 WatchMachine을 등록함으로써,
+	//Wathcer가 모든 등록된 WatchMachine을 한 곳에서 조회 가능하게 한다.
+	MachineRegistry MachineRegistry
+
 	//GcChecker를 통해 WatchMachine의 구독자들을 체크하고,
 	//구독자들이 다 멈췄다면, 쓸모없어신 자신도 멈춤.
 	GcChecker GcCheckerInterface
@@ -43,8 +55,8 @@ type WatchMachine struct {
 }
 
 type LoopContextConfig struct {
-	RunContextTimeout  time.Time
-	RootContextTimeout time.Time
+	RunContextTimeout  time.Duration
+	RootContextTimeout time.Duration
 }
 type WatchType string
 

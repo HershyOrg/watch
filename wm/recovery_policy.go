@@ -12,4 +12,4 @@ package wm
 // => Chan은 특정 혼잡 구간에 에러 뱉을 수 있기 때문임.
 // 리커버 이펙트가 필요 시 tryRecoverOrNil에 TryRecover를 지시하고,
 // 리커버 필요 x시 nil리턴함.
-type PrescribeFunc func(varHistory VarReducedHistory) (state LoopState, tryRecoverOrNil *TryRecoverLoop)
+type PrescribeFunc func(varHistory LoopHistory) (state LoopState, tryRecoverOrNil *TryRecoverLoop)

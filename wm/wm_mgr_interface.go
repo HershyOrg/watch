@@ -6,7 +6,10 @@ import "github.com/HershyOrg/watch/shared"
 // Manager는 WatchMachine을 "구독"함
 // Subscriber(Manager)는 WatchMachine에게 "수집한 valueLog"를 얻어옮.
 type Subscriber interface {
-	GetVarHistory(SubscriberName string) ([]shared.RawWatchValue, error)
+	//GetVarHistory는 Subscriber가 watchMachine에서 VarHistory꺼내오는 것임.
+	GetVarHistory(varName string) ([]shared.RawWatchValue, error)
+	GetState() (controlState shared.ControlState, runnerState shared.RunnerState)
+	GetNewSigAppendChan() <-chan struct{}
 }
 
 // Publisher는 WatchMachine이 Manager를 "발행자"로 바라봤을 때의 interface임.

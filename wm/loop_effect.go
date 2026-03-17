@@ -1,6 +1,5 @@
 package wm
 
-type LoopEffectHandlerInferface interface{}
 type LoopEffect interface {
 	LoopEffect()
 }
@@ -25,6 +24,10 @@ func (t *TryRecoverLoop) LoopEffect() { return }
 type StopLoop struct{}
 
 func (s *StopLoop) LoopEffect() { return }
+
+type KillLoop struct{}
+
+func (k *KillLoop) LoopEffect() { return }
 
 // CrashLoop는 Loop를 멈춘 후, Crash로 전이하게 하는 Effect임
 type CrashLoop struct{}
