@@ -15,7 +15,7 @@ type GetRawFlowHandleFunc func(flowCtx FlowContext) (RawFlowHandle, error)
 // RawCallHandle은 WatchMachine이  CallHandle을 저장하기 위해 변형한 형태임.
 type RawCallHandle struct {
 	RawInit          any
-	Tick             time.Time
+	Tick             time.Duration
 	GetRawUpdateFunc func(runCtx RunContext) RawUpdateFunc
 	varName          string
 }

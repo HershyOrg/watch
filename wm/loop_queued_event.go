@@ -35,24 +35,6 @@ type CrashRequested struct{}
 
 func (c *CrashRequested) LoopEvent() {}
 
-// LoopWatchedNewVar는 UpdateFunc적용 후 WatchLoop가 발견한 새 에러이다.
-// 값을 Watch후, 에러가 발생 시 이를 통해 보고한다.
-type LoopGotErrFromUpdateFunc struct {
-	WatchedTime   time.Time
-	RawUpdateFunc RawUpdateFunc
-	Err           error
-}
-
-func (lw *LoopGotErrFromUpdateFunc) LoopEvent() {}
-
-// LoopGotErrFromGetHandle는 Loop가 Handle을 얻지 못한 사건이다.
-type LoopGotErrFromGetHandle struct {
-	WatchType                 WatchType
-	GetRawCallHandleFuncOrNil GetRawCallHandleFunc
-	GetFlowHandleFuncOrNil    GetRawFlowHandleFunc
-}
-
-func (lg *LoopGotErrFromGetHandle) LoopEvent() {}
 
 // WmCheckedAllSubscribers 는 WatchMachine이 자신의 구독자들 상태를
 // GC루틴으로 체크한 사건이다.

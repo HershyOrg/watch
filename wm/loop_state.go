@@ -1,13 +1,5 @@
 package wm
 
-// LoopReducerInterface는 Loop의 Reducer가 해야 할 일에 대한 디자인임.
-type LoopReducerInterface interface {
-	//Reduce는 외부 주입 이벤트(LoopEvent)를 받아 상태 전이와 이펙트를 결정함.
-	Reduce(currentState LoopState, event LoopEvent) (nextState LoopState, effects []LoopEffect)
-	//ReduceDriven은 Loop(=Runner)가 Effect 실행 후 반환한 결과 이벤트를 받아
-	//재귀적으로 상태 전이와 추가 이펙트를 결정함.
-	ReduceDriven(currentState LoopState, driven LoopEffectDrivenEvent) (nextState LoopState, effects []LoopEffect)
-}
 
 // LoopState는 WatchLoop의 상태임
 type LoopState interface {
@@ -34,12 +26,20 @@ type LoopTryingRecovery struct{}
 
 func (lt *LoopTryingRecovery) LoopState() { return }
 
-// LoopStopped는 Loop가 멈췄음을 나타냄.
+// LoopStopped는 Loop가 정상 정지됨을 나타냄.
+// 재시작 가능한 상태임 (StartRequested로 다시 시작 가능).
 type LoopStopped struct{}
 
 func (ls *LoopStopped) LoopState() { return }
 
+// LoopKilled는 Loop가 강제 종료됨을 나타냄.
+// 완전 종료(terminal) 상태. 재시작 불가.
+type LoopKilled struct{}
+
+func (lk *LoopKilled) LoopState() { return }
+
 // LoopCrashed는 Loop가 복구 불가로 멈췄음을 나타냄.
+// 완전 종료(terminal) 상태. 재시작 불가.
 type LoopCrashed struct{}
 
 func (lc *LoopCrashed) LoopState() { return }

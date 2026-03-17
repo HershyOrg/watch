@@ -15,7 +15,7 @@ type TryRecoverLoop struct {
 	//* 여긴 리커버리 폴리시 맞게 수정하기
 	//*함수의 연속열을 넣어줘도 좋을듯. sleep하고, 재시작하고 등등.
 	//*여기선 "Loop에 조작 가하기"의 의미로 이 임시 함수 시그니처 썼음.
-	ApplyPrescription []func(loop WatchLoopInterface)
+	ApplyPrescription []func(loop WatchLoop)
 }
 
 func (t *TryRecoverLoop) LoopEffect() { return }

@@ -27,7 +27,7 @@ type GetCallHandleFunc[T any] func(callCtx CallContext) (CallHandle[T], error)
 type CallHandle[T any] struct {
 	Init T
 	//Tick마다 GetUpdateFunc를 가져오는 것 = Chan으로 UpdateFunc를 가져오는 것과 구조적 동일함
-	Tick time.Time
+	Tick time.Duration
 	//*GetUpdateFunc는 error를 반환하지 않음.
 	//*에러 발생 시 그 에러를 그냥 UpdateFunc의 return값이 에러가 되게 UpdateFunc를 만듦.
 	GetUpdateFunc func(runCtx RunContext) UpdateFunc[T]

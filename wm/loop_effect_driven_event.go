@@ -49,3 +49,14 @@ func (l *LoopKillCompleted) LoopEffectDrivenEvent() {}
 type LoopCrashCompleted struct{}
 
 func (l *LoopCrashCompleted) LoopEffectDrivenEvent() {}
+
+// LoopGotErrFromGetHandle는 Loop가 Handle을 얻지 못한 결과임.
+// StartLoop Effect 실행 중 GetHandle에서 에러 또는 패닉 발생 시 반환됨.
+type LoopGotErrFromGetHandle struct {
+	WatchType                 WatchType
+	GetRawCallHandleFuncOrNil GetRawCallHandleFunc
+	GetFlowHandleFuncOrNil    GetRawFlowHandleFunc
+	Err                       error
+}
+
+func (lg *LoopGotErrFromGetHandle) LoopEffectDrivenEvent() {}

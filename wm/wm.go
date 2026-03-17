@@ -1,6 +1,9 @@
 package wm
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // WatchMachine은 Watch와 관련한 기능을 한데 모은 구조체임.
 // Manager는 WatchMachine을 Subscribe함으로써 새 변수 값을 감지-추적 가능함.
@@ -15,30 +18,35 @@ type WatchMachine struct {
 	GetRawFlowHandleOrNil GetRawFlowHandleFunc
 
 	//reduce-effect엔진
-	loopReducer LoopReducerInterface
+	loopReducer LoopReducer
 	//loop의 상태-조작을 reducer-effect가 담당-지시함.
 	//Loop는 Manager의 MgrFuncRunner(=Target)와 동일한 역할임.
-	loop WatchLoopInterface
+	loop *WatchLoop
 
 	//currentLoopState는 Loop의 현재 상태임.
 	//Reducer가 순수 함수이므로, WatchMachine이 state를 보관함.
 	currentLoopState LoopState
 
 	//loopHistory는 watchMachine의 관측기록을 나타낸다.
-	//이론상으론 무한 길이 배열이지만, 성능 상 3만 길이 배열을 윈도잉한다.
-	loopHistory LoopHistory
+	loopHistory *LoopHistory
 
 	//loopCtxConfig로 WatchMachine의 생명주기-타임아웃 결정
 	loopCtxConfig LoopContextConfig
 
+	//eventChan은 외부 제어 이벤트(Start/Stop/Kill)를 이벤트 루프에 전달함.
+	eventChan chan LoopEvent
+
+	//notifyChs는 Subscriber에게 NewSigAppend 알림을 보내기 위한 쓰기 가능 채널들.
+	notifyChs []chan struct{}
+
+	//cancelEventLoop는 이벤트 루프 고루틴을 종료하기 위한 함수.
+	cancelEventLoop context.CancelFunc
+
 	//Subscribers는 WatchMachine을 구독한 Manager들임.
-	//즉, WatchXXX를 varName으로 호출한 것들.
 	Subscribers []Subscriber
 
 	//PublisherOrNil는 Multi-Manager가 구현되었을 시,
 	//해당 WatchMachine을 Export한 Manager를 나타냄
-	//Share일 경우에도 마찬가지로, Pubslisher없음.
-	//현재는 신경쓰지 않으며, 당장은 빈 리스트로 둚.
 	PublishersOrNil []Publisher
 
 	//MachineRegistry에 WatchMachine을 등록함으로써,
@@ -49,8 +57,6 @@ type WatchMachine struct {
 	//구독자들이 다 멈췄다면, 쓸모없어신 자신도 멈춤.
 	GcChecker GcCheckerInterface
 	//PublishersChecker를 통해 자신을 Export한 Manager가 죽었는지 체크함.
-	//Loop가 받는 정보만으론 Export한 Manager 상태를 체크할 수 없기 때문.
-	//현재 Export기능이 없으므로,지금은 PublishersChecker를 고려하지 않음.
 	PublishersChecker PublishersCheckerInterface
 }
 
@@ -64,3 +70,129 @@ const (
 	WatchFlowType WatchType = "WatchFlowType"
 	WatchCallType WatchType = "WatchCallType"
 )
+
+// WatchMachineConfig는 WatchMachine 생성에 필요한 설정임.
+type WatchMachineConfig struct {
+	VarName               string
+	WatchType             WatchType
+	GetRawCallHandleOrNil GetRawCallHandleFunc
+	GetRawFlowHandleOrNil GetRawFlowHandleFunc
+	LoopCtxConfig         LoopContextConfig
+}
+
+// NewWatchMachine은 WatchMachine을 생성하고 이벤트 루프를 시작함.
+func NewWatchMachine(cfg WatchMachineConfig) *WatchMachine {
+	history := NewLoopHistory(LoopHistoryConfig{
+		MaxLen: 30000,
+		MaxDur: 24 * time.Hour,
+	})
+	notifyChs := make([]chan struct{}, 0)
+
+	loop := NewWatchLoop(
+		cfg.VarName,
+		cfg.WatchType,
+		cfg.GetRawCallHandleOrNil,
+		cfg.GetRawFlowHandleOrNil,
+		cfg.LoopCtxConfig,
+		history,
+		&notifyChs,
+	)
+
+	wm := &WatchMachine{
+		VarName:               cfg.VarName,
+		WatchType:             cfg.WatchType,
+		GetRawCallHandleOrNil: cfg.GetRawCallHandleOrNil,
+		GetRawFlowHandleOrNil: cfg.GetRawFlowHandleOrNil,
+		loopReducer:           LoopReducer{},
+		loop:                  loop,
+		currentLoopState:      &LoopIdle{},
+		loopHistory:           history,
+		loopCtxConfig:         cfg.LoopCtxConfig,
+		eventChan:             make(chan LoopEvent, 100),
+		notifyChs:             notifyChs,
+	}
+
+	// 이벤트 루프 시작
+	ctx, cancel := context.WithCancel(context.Background())
+	wm.cancelEventLoop = cancel
+	go wm.runEventLoop(ctx)
+
+	return wm
+}
+
+// runEventLoop는 eventChan을 감시하며 이벤트를 처리함.
+func (wm *WatchMachine) runEventLoop(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case event := <-wm.eventChan:
+			wm.reduceAndExecute(event)
+		}
+	}
+}
+
+// reduceAndExecute는 LoopEvent를 Reduce 후 Effect를 실행하고,
+// DrivenEvent를 재귀적으로 처리함.
+func (wm *WatchMachine) reduceAndExecute(event LoopEvent) {
+	nextState, effects := wm.loopReducer.Reduce(wm.currentLoopState, event)
+	wm.currentLoopState = nextState
+
+	for _, effect := range effects {
+		driven := wm.loop.Execute(effect)
+		if driven != nil {
+			wm.reduceAndExecuteDriven(driven)
+		}
+	}
+}
+
+// reduceAndExecuteDriven은 DrivenEvent를 ReduceDriven 후 Effect를 실행하고,
+// 재귀적으로 처리함.
+func (wm *WatchMachine) reduceAndExecuteDriven(driven LoopEffectDrivenEvent) {
+	nextState, effects := wm.loopReducer.ReduceDriven(wm.currentLoopState, driven)
+	wm.currentLoopState = nextState
+
+	for _, effect := range effects {
+		drivenResult := wm.loop.Execute(effect)
+		if drivenResult != nil {
+			wm.reduceAndExecuteDriven(drivenResult)
+		}
+	}
+}
+
+// Start는 WatchMachine의 Loop를 시작함.
+func (wm *WatchMachine) Start() {
+	wm.eventChan <- &StartRequested{NeedInit: true}
+}
+
+// Stop은 WatchMachine의 Loop를 정상 종료함.
+func (wm *WatchMachine) Stop() {
+	wm.eventChan <- &StopRequested{}
+}
+
+// Kill은 WatchMachine의 Loop를 강제 종료함.
+func (wm *WatchMachine) Kill() {
+	wm.eventChan <- &KillRequested{}
+}
+
+// GetLoopState는 현재 Loop 상태를 반환함.
+func (wm *WatchMachine) GetLoopState() LoopState {
+	return wm.currentLoopState
+}
+
+// GetLoopHistory는 현재 유효한 관측 기록을 시간순 복사본으로 반환함.
+func (wm *WatchMachine) GetLoopHistory() []ReducedSnapshot {
+	return wm.loop.loopHistory.All()
+}
+
+// AddNotifyCh는 NewSigAppend 알림을 받을 채널을 추가함.
+func (wm *WatchMachine) AddNotifyCh(ch chan struct{}) {
+	*wm.loop.notifyChs = append(*wm.loop.notifyChs, ch)
+}
+
+// Close는 이벤트 루프를 종료함.
+func (wm *WatchMachine) Close() {
+	if wm.cancelEventLoop != nil {
+		wm.cancelEventLoop()
+	}
+}
