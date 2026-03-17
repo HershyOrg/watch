@@ -7,7 +7,7 @@ import "github.com/HershyOrg/watch/shared"
 // Subscriber(Manager)는 WatchMachine에게 "수집한 valueLog"를 얻어옮.
 type Subscriber interface {
 	//GetVarHistory는 Subscriber가 watchMachine에서 VarHistory꺼내오는 것임.
-	GetVarHistory(varName string) ([]shared.RawWatchValue, error)
+	ReadVarHistory(varName string) ([]shared.RawWatchValue, error)
 	GetState() (controlState shared.ControlState, runnerState shared.RunnerState)
 	GetNewSigAppendChan() <-chan struct{}
 }
@@ -16,4 +16,5 @@ type Subscriber interface {
 // 이는 추후 Multi-Manager기능 시 유효해짐.
 // 지금 당장은 세세하게 다루지 않음.
 type Publisher interface {
+	PushUpdateFunc(varName string, updateFunc RawUpdateFunc)
 }

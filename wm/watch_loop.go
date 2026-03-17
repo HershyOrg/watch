@@ -281,7 +281,7 @@ func (wl *WatchLoop) safeGetFlowHandle() (handle RawFlowHandle, err error) {
 
 func (wl *WatchLoop) executeTryRecover(effect *TryRecoverLoop) LoopEffectDrivenEvent {
 	// sleep 전에 반드시 Loop 중지 — 어떤 경로에서든
-	//History 누적 방지
+	// History 누적 방지
 	if wl.rootCancel != nil {
 		wl.rootCancel()
 	}
