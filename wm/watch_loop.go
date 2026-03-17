@@ -19,6 +19,8 @@ type WatchLoop struct {
 	loopHistory           *LoopHistory
 	notifyChs             *[]chan struct{}
 	varName               string
+	recoveryPolicy        LoopRecoveryPolicy
+	eventChan             chan<- LoopEvent // WatchMachine의 eventChan 참조
 
 	// 런타임 상태
 	rootCtx    context.Context
@@ -34,6 +36,8 @@ func NewWatchLoop(
 	loopCtxConfig LoopContextConfig,
 	loopHistory *LoopHistory,
 	notifyChs *[]chan struct{},
+	recoveryPolicy LoopRecoveryPolicy,
+	eventChan chan<- LoopEvent,
 ) *WatchLoop {
 	return &WatchLoop{
 		varName:               varName,
@@ -43,15 +47,19 @@ func NewWatchLoop(
 		loopCtxConfig:         loopCtxConfig,
 		loopHistory:           loopHistory,
 		notifyChs:             notifyChs,
+		recoveryPolicy:        recoveryPolicy,
+		eventChan:             eventChan,
 	}
 }
 
 // Execute는 Reducer가 생성한 LoopEffect를 받아 실행하고,
 // 그 결과를 LoopEffectDrivenEvent로 반환함.
 func (wl *WatchLoop) Execute(effect LoopEffect) LoopEffectDrivenEvent {
-	switch effect.(type) {
+	switch e := effect.(type) {
 	case *StartLoop:
 		return wl.executeStart()
+	case *TryRecoverLoop:
+		return wl.executeTryRecover(e)
 	case *StopLoop:
 		return wl.executeStop()
 	case *KillLoop:
@@ -134,7 +142,11 @@ func (wl *WatchLoop) runCallTicker(handle RawCallHandle) {
 		case <-wl.rootCtx.Done():
 			return
 		case <-ticker.C:
-			wl.processCallTick(handle)
+			drainDur := wl.processCallTick(handle)
+			if drainDur > 0 {
+				// drain 동안 밀린 tick을 버림
+				wl.drainTickerChanDuring(ticker.C, drainDur)
+			}
 		}
 	}
 }
@@ -143,7 +155,8 @@ func (wl *WatchLoop) runCallTicker(handle RawCallHandle) {
 // 에러 처리 통합: GetUpdateFunc 패닉 → 에러 리턴하는 UpdateFunc로 대체.
 // UpdateFunc 패닉 → 에러를 담은 RawWatchValue로 처리.
 // 모든 경로가 동일한 snapshot 기록 흐름을 따름.
-func (wl *WatchLoop) processCallTick(handle RawCallHandle) {
+// processCallTick는 한 번의 tick을 처리하고, drain이 필요하면 그 duration을 반환함.
+func (wl *WatchLoop) processCallTick(handle RawCallHandle) time.Duration {
 	// RunContext 생성 (timeout)
 	timeout := wl.loopCtxConfig.RunContextTimeout
 	if timeout <= 0 {
@@ -165,7 +178,7 @@ func (wl *WatchLoop) processCallTick(handle RawCallHandle) {
 
 	// 3) skip==true면 아무것도 안 함
 	if skip {
-		return
+		return 0
 	}
 
 	// 4) skip==false면: snapshot 기록 → Subscriber 알림
@@ -176,6 +189,12 @@ func (wl *WatchLoop) processCallTick(handle RawCallHandle) {
 	}
 	wl.loopHistory.Append(snapshot)
 	wl.notifySubscribers()
+
+	// 5) 에러 시 리커버리 판단
+	if next.Error != nil {
+		return wl.handleUpdateFuncError()
+	}
+	return 0
 }
 
 // --- Flow ---
@@ -214,19 +233,22 @@ func (wl *WatchLoop) runFlowListener(handle RawFlowHandle) {
 			if !ok {
 				return // 채널 닫힘
 			}
-			wl.processFlowUpdate(updateFunc)
+			drainDur := wl.processFlowUpdate(updateFunc)
+			if drainDur > 0 {
+				wl.drainFlowChanDuring(handle.RawFlowChan, drainDur)
+			}
 		}
 	}
 }
 
 // processFlowUpdate는 Flow에서 수신한 UpdateFunc를 처리함.
-// Call의 processCallTick와 동일한 흐름이되, GetUpdateFunc 단계가 없음.
-func (wl *WatchLoop) processFlowUpdate(updateFunc RawUpdateFunc) {
+// drain이 필요하면 그 duration을 반환함 (caller가 채널 drain).
+func (wl *WatchLoop) processFlowUpdate(updateFunc RawUpdateFunc) time.Duration {
 	prev := wl.loopHistory.LastValue()
 	next, skip := wl.safeCallUpdateFunc(updateFunc, prev)
 
 	if skip {
-		return
+		return 0
 	}
 
 	snapshot := ReducedSnapshot{
@@ -236,6 +258,11 @@ func (wl *WatchLoop) processFlowUpdate(updateFunc RawUpdateFunc) {
 	}
 	wl.loopHistory.Append(snapshot)
 	wl.notifySubscribers()
+
+	if next.Error != nil {
+		return wl.handleUpdateFuncError()
+	}
+	return 0
 }
 
 func (wl *WatchLoop) safeGetFlowHandle() (handle RawFlowHandle, err error) {
@@ -248,6 +275,76 @@ func (wl *WatchLoop) safeGetFlowHandle() (handle RawFlowHandle, err error) {
 	fc := &simpleRunContext{Context: wl.rootCtx}
 	handle, err = wl.getRawFlowHandleOrNil(fc)
 	return
+}
+
+// --- Recovery ---
+
+func (wl *WatchLoop) executeTryRecover(effect *TryRecoverLoop) LoopEffectDrivenEvent {
+	// sleep 전에 반드시 Loop 중지 — 어떤 경로에서든
+	//History 누적 방지
+	if wl.rootCancel != nil {
+		wl.rootCancel()
+	}
+
+	consecutiveErrs := wl.loopHistory.ConsecutiveErrors()
+	if consecutiveErrs >= wl.recoveryPolicy.MaxConsecutiveFailures {
+		return &LoopRecoveryCrashed{}
+	}
+	delay := wl.recoveryPolicy.CalculateBackoff(consecutiveErrs)
+	time.Sleep(delay)
+	return &LoopRecoveryApplied{}
+}
+
+// handleUpdateFuncError는 UpdateFunc 에러 발생 시 리커버리 판단을 수행함.
+// 반환값: caller가 drain해야 할 duration. caller(runCallTicker/runFlowListener)가 자신의 소스를 drain.
+// Tier 1: delay 동안 들어오는 모든 신호를 버림
+// Tier 2: eventChan에 RecoveryRequested 삽입 (전체 복구)
+func (wl *WatchLoop) handleUpdateFuncError() time.Duration {
+	consecutiveErrs := wl.loopHistory.ConsecutiveErrors()
+
+	if consecutiveErrs >= wl.recoveryPolicy.MinConsecutiveFailures {
+		select {
+		case wl.eventChan <- &RecoveryRequested{}:
+		default:
+		}
+		return 0
+	}
+
+	return wl.recoveryPolicy.LightweightDelay(consecutiveErrs)
+}
+
+// drainTickerChanDuring은 dur 동안 ticker 채널에서 들어오는 tick을 버림.
+// runCallTicker에서 직접 호출됨 (같은 고루틴이므로 경쟁 없음).
+func (wl *WatchLoop) drainTickerChanDuring(tickerC <-chan time.Time, dur time.Duration) {
+	timer := time.NewTimer(dur)
+	defer timer.Stop()
+	for {
+		select {
+		case <-timer.C:
+			return
+		case <-tickerC:
+			// tick 버림
+		case <-wl.rootCtx.Done():
+			return
+		}
+	}
+}
+
+func (wl *WatchLoop) drainFlowChanDuring(ch <-chan RawUpdateFunc, dur time.Duration) {
+	timer := time.NewTimer(dur)
+	defer timer.Stop()
+	for {
+		select {
+		case <-timer.C:
+			return
+		case _, ok := <-ch:
+			if !ok {
+				return
+			}
+		case <-wl.rootCtx.Done():
+			return
+		}
+	}
 }
 
 // --- Stop/Kill/Crash ---

@@ -1,15 +1,16 @@
 package wm
 
-// LoopReducer는 LoopReducerInterface의 구체 구현임.
-// 순수 함수형: 외부에서 state를 주입받아 전이를 결정함.
-// 리커버리는 현 단계에서 미구현: 에러 발생 시 바로 Crash 처리.
+// LoopReducer는 순수 함수형 Reducer.
+// 외부에서 state를 주입받아 전이를 결정함.
 //
 // Terminal state: LoopKilled, LoopCrashed (재시작 불가)
 // Non-terminal stop: LoopStopped (재시작 가능)
-type LoopReducer struct{}
+type LoopReducer struct {
+	loopHistory    *LoopHistory
+	recoveryPolicy LoopRecoveryPolicy
+}
 
 func (r *LoopReducer) Reduce(current LoopState, event LoopEvent) (LoopState, []LoopEffect) {
-	// terminal state에선 모든 이벤트 무시
 	switch current.(type) {
 	case *LoopKilled, *LoopCrashed:
 		return current, nil
@@ -24,30 +25,46 @@ func (r *LoopReducer) Reduce(current LoopState, event LoopEvent) (LoopState, []L
 		return r.reduceRunning(event)
 	case *LoopStarting:
 		return current, nil
+	case *LoopTryingRecovery:
+		return current, nil
 	}
 
 	return current, nil
 }
 
 func (r *LoopReducer) ReduceDriven(current LoopState, driven LoopEffectDrivenEvent) (LoopState, []LoopEffect) {
-	// terminal state에선 모든 DrivenEvent 무시
 	switch current.(type) {
 	case *LoopKilled, *LoopCrashed:
 		return current, nil
 	}
 
-	switch d := driven.(type) {
+	switch driven.(type) {
 	case *LoopStarted:
 		return &LoopRunning{}, nil
 
 	case *LoopGotErrFromGetHandle:
-		_ = d
-		return current, []LoopEffect{&CrashLoop{}}
+		// GetHandle 실패 → 연속 에러 체크 후 리커버리 or Crash
+		consecutiveErrs := r.loopHistory.ConsecutiveErrors()
+		if consecutiveErrs >= r.recoveryPolicy.MaxGetHandleRetries {
+			return current, []LoopEffect{&CrashLoop{}}
+		}
+		return &LoopTryingRecovery{}, []LoopEffect{&TryRecoverLoop{}}
 
 	case *LoopStartFailed:
 		return current, []LoopEffect{&CrashLoop{}}
 
+	case *LoopRecoveryApplied:
+		// 리커버리 완료 → 다시 StartLoop
+		return &LoopStarting{}, []LoopEffect{&StartLoop{}}
+
+	case *LoopRecoveryCrashed:
+		return current, []LoopEffect{&CrashLoop{}}
+
 	case *LoopStopCompleted:
+		if _, ok := current.(*LoopTryingRecovery); ok {
+			// RecoveryRequested에 의한 Stop완료 → TryRecoverLoop 발행
+			return &LoopTryingRecovery{}, []LoopEffect{&TryRecoverLoop{}}
+		}
 		return &LoopStopped{}, nil
 
 	case *LoopKillCompleted:
@@ -74,7 +91,6 @@ func (r *LoopReducer) reduceIdle(event LoopEvent) (LoopState, []LoopEffect) {
 	return &LoopIdle{}, nil
 }
 
-// reduceStopped — LoopStopped는 재시작 가능한 상태
 func (r *LoopReducer) reduceStopped(event LoopEvent) (LoopState, []LoopEffect) {
 	switch event.(type) {
 	case *StartRequested:
@@ -95,6 +111,13 @@ func (r *LoopReducer) reduceRunning(event LoopEvent) (LoopState, []LoopEffect) {
 		return &LoopRunning{}, []LoopEffect{&KillLoop{}}
 	case *CrashRequested:
 		return &LoopRunning{}, []LoopEffect{&CrashLoop{}}
+	case *RecoveryRequested:
+		// Tier 2: 현재 Loop Stop → TryingRecovery로 전이
+		consecutiveErrs := r.loopHistory.ConsecutiveErrors()
+		if consecutiveErrs >= r.recoveryPolicy.MaxConsecutiveFailures {
+			return &LoopRunning{}, []LoopEffect{&CrashLoop{}}
+		}
+		return &LoopTryingRecovery{}, []LoopEffect{&StopLoop{}}
 	}
 	return &LoopRunning{}, nil
 }

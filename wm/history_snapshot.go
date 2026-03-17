@@ -118,6 +118,25 @@ func (h *LoopHistory) Len() int {
 	return h.count
 }
 
+// ConsecutiveErrors는 LoopHistory 끝에서부터 연속된 에러 수를 반환함.
+// ReturnedValue.Error != nil 또는 GetHandleErrOrNil != nil이면 에러로 간주.
+// 정상 값을 만나면 중단.
+func (h *LoopHistory) ConsecutiveErrors() int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	count := 0
+	for i := h.count - 1; i >= 0; i-- {
+		snap := h.buf[(h.head+i)%h.cap]
+		if snap.ReturnedValue.Error != nil || snap.GetHandleErrOrNil != nil {
+			count++
+		} else {
+			break
+		}
+	}
+	return count
+}
+
 // ReducedSnapshot은 그 시점에서 Loop가 변수의 UpdateFunc를 관측 후 적용한 결과다.
 type ReducedSnapshot struct {
 	ReceivedTime time.Time

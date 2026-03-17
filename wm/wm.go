@@ -78,15 +78,22 @@ type WatchMachineConfig struct {
 	GetRawCallHandleOrNil GetRawCallHandleFunc
 	GetRawFlowHandleOrNil GetRawFlowHandleFunc
 	LoopCtxConfig         LoopContextConfig
+	RecoveryPolicy        LoopRecoveryPolicy
 }
 
 // NewWatchMachine은 WatchMachine을 생성하고 이벤트 루프를 시작함.
 func NewWatchMachine(cfg WatchMachineConfig) *WatchMachine {
+	// RecoveryPolicy 기본값 적용
+	if cfg.RecoveryPolicy.MaxConsecutiveFailures == 0 {
+		cfg.RecoveryPolicy = DefaultLoopRecoveryPolicy()
+	}
+
 	history := NewLoopHistory(LoopHistoryConfig{
 		MaxLen: 30000,
 		MaxDur: 24 * time.Hour,
 	})
 	notifyChs := make([]chan struct{}, 0)
+	eventChan := make(chan LoopEvent, 100)
 
 	loop := NewWatchLoop(
 		cfg.VarName,
@@ -96,6 +103,8 @@ func NewWatchMachine(cfg WatchMachineConfig) *WatchMachine {
 		cfg.LoopCtxConfig,
 		history,
 		&notifyChs,
+		cfg.RecoveryPolicy,
+		eventChan,
 	)
 
 	wm := &WatchMachine{
@@ -103,13 +112,16 @@ func NewWatchMachine(cfg WatchMachineConfig) *WatchMachine {
 		WatchType:             cfg.WatchType,
 		GetRawCallHandleOrNil: cfg.GetRawCallHandleOrNil,
 		GetRawFlowHandleOrNil: cfg.GetRawFlowHandleOrNil,
-		loopReducer:           LoopReducer{},
-		loop:                  loop,
-		currentLoopState:      &LoopIdle{},
-		loopHistory:           history,
-		loopCtxConfig:         cfg.LoopCtxConfig,
-		eventChan:             make(chan LoopEvent, 100),
-		notifyChs:             notifyChs,
+		loopReducer: LoopReducer{
+			loopHistory:    history,
+			recoveryPolicy: cfg.RecoveryPolicy,
+		},
+		loop:             loop,
+		currentLoopState: &LoopIdle{},
+		loopHistory:      history,
+		loopCtxConfig:    cfg.LoopCtxConfig,
+		eventChan:        eventChan,
+		notifyChs:        notifyChs,
 	}
 
 	// 이벤트 루프 시작

@@ -35,6 +35,12 @@ type CrashRequested struct{}
 
 func (c *CrashRequested) LoopEvent() {}
 
+// RecoveryRequested는 ticker/flow 고루틴이 연속 에러 임계치 도달 시
+// WatchMachine에게 Tier 2 전체 복구를 요청하는 이벤트임.
+type RecoveryRequested struct{}
+
+func (r *RecoveryRequested) LoopEvent() {}
+
 
 // WmCheckedAllSubscribers 는 WatchMachine이 자신의 구독자들 상태를
 // GC루틴으로 체크한 사건이다.
