@@ -25,7 +25,6 @@ type WatchFlowFunc[T any] func(varName string, getFlowHandle GetFlowHandleFunc[T
 type GetCallHandleFunc[T any] func(callCtx CallContext) (CallHandle[T], error)
 
 type CallHandle[T any] struct {
-	Init T
 	//Tick마다 GetUpdateFunc를 가져오는 것 = Chan으로 UpdateFunc를 가져오는 것과 구조적 동일함
 	Tick time.Duration
 	//*GetUpdateFunc는 error를 반환하지 않음.
@@ -41,7 +40,6 @@ type UpdateFunc[T any] func(prev shared.WatchValue[T]) (next shared.WatchValue[T
 
 type GetFlowHandleFunc[T any] func(flowCtx FlowContext) (FlowHandle[T], error)
 type FlowHandle[T any] struct {
-	Init     T
 	FlowChan chan UpdateFunc[T]
 	//* varName은 WatchFlow가 varName받은 후 삽입
 	varName string
