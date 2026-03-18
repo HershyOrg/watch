@@ -207,6 +207,10 @@ type ManageContext interface {
 	// Returns any to avoid circular dependency with hersh package
 	GetWatcher() any
 
+	// GetMachineRegistry returns the MachineRegistry for WatchXXX functions.
+	// Returns any to avoid circular dependency (실제로는 wm.MachineRegistry).
+	GetMachineRegistry() any
+
 	// GetEnv returns the environment variable value for the given key
 	// The second return value (ok) is true if the key exists, false otherwise
 	// Environment variables are immutable after Watcher initialization

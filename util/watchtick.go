@@ -3,13 +3,12 @@ package util
 import (
 	"time"
 
+	"github.com/HershyOrg/watch"
 	"github.com/HershyOrg/watch/shared"
 )
 
-// WatchTick monitors time-based intervals and returns a HershTick with timestamp and count.
-//
-// Stub: pending reimplementation with WatchMachine.
+// WatchTick monitors time-based intervals and returns a TickValue with timestamp and count.
 func WatchTick(varName string, tickInterval time.Duration, runCtx shared.ManageContext) shared.TickValue {
-	// TODO: Reimplement using WatchMachine in next phase
-	panic("WatchTick: stub - pending reimplementation with WatchMachine")
+	wv := watch.WatchTick(varName, tickInterval, runCtx)
+	return wv.Value
 }

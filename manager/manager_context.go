@@ -167,3 +167,11 @@ func (mc *ManageContext) GetLogger() ContextLogger {
 func (mc *ManageContext) GetWatcher() any {
 	return mc.manager
 }
+
+// GetMachineRegistry returns the MachineRegistry as any to implement shared.ManageContext interface.
+func (mc *ManageContext) GetMachineRegistry() any {
+	if mc.manager == nil {
+		return nil
+	}
+	return mc.manager.GetMachineRegistry()
+}

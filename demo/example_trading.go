@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/HershyOrg/watch"
+	"github.com/HershyOrg/watch/shared"
+	"github.com/HershyOrg/watch/wm"
 )
 
 // Trading strategy configuration
@@ -75,28 +77,28 @@ func tradingFunc(msg *watch.Message, ctx watch.ManageContext) error {
 	// Watch Bitcoin price - always outside conditional logic (generic version)
 	priceHV := watch.DELELTED_WatchCall[float64](
 		0.0, // Initial price value
-		func() (func(float64) (float64, error), bool, error) {
-			// 네트워크 요청은 미리 해둔 후, func엔 가능한 계산만 남기는게 성능상 유리.
-			price, err := client.GetBitcoinPrice()
-			if err != nil {
-				return nil, false, err
-			}
-			// VarUpdateFunc that updates the price value and determines signal
-			updateFunc := func(prev float64) (float64, error) {
-				// Check if price changed significantly (>$100)
-				if prev > 0 {
-					if abs(price-prev) > 100.0 {
-						fmt.Printf("  [Watch] Price changed: $%.2f → $%.2f (Δ $%.2f)\n",
-							prev, price, price-prev)
+		func(callCtx wm.CallContext) (wm.CallHandle[float64], error) {
+			return wm.CallHandle[float64]{
+				Tick: 500 * time.Millisecond,
+				GetUpdateFunc: func(runCtx wm.RunContext) wm.UpdateFunc[float64] {
+					// 네트워크 요청은 여기서 미리 수행
+					price, err := client.GetBitcoinPrice()
+					if err != nil {
+						return func(prev shared.WatchValue[float64]) (shared.WatchValue[float64], bool) {
+							return shared.WatchValue[float64]{Error: err, VarName: "btcPrice"}, false
+						}
 					}
-				}
-				return price, nil
-			}
-
-			// Don't skip signal for demo (always signal to show price updates)
-			skipSignal := false
-
-			return updateFunc, skipSignal, nil
+					return func(prev shared.WatchValue[float64]) (shared.WatchValue[float64], bool) {
+						if prev.Value > 0 {
+							if abs(price-prev.Value) > 100.0 {
+								fmt.Printf("  [Watch] Price changed: $%.2f → $%.2f (Δ $%.2f)\n",
+									prev.Value, price, price-prev.Value)
+							}
+						}
+						return shared.WatchValue[float64]{Value: price, VarName: "btcPrice"}, false
+					}
+				},
+			}, nil
 		},
 		"btcPrice",
 		500*time.Millisecond, // Poll every 500ms

@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/HershyOrg/watch"
+	"github.com/HershyOrg/watch/shared"
+	"github.com/HershyOrg/watch/wm"
 )
 
 // Advanced example demonstrating WatchCall reactive mechanism
@@ -21,24 +23,22 @@ func main1() {
 	managedFunc := func(msg *watch.Message, ctx watch.ManageContext) error {
 		fmt.Printf("\n[Managed Function Execution]\n")
 
-		// WatchCall monitors external value and triggers re-execution on change (generic version)
+		// WatchCall monitors external value and triggers re-execution on change
 		hv := watch.DELELTED_WatchCall[int](
 			0, // Initial counter value
-			func() (func(int) (int, error), bool, error) {
-				// Simulate polling external data source
-				currentValue := externalCounter
-				externalCounter++
-
-				// VarUpdateFunc that updates to the new value
-				updateFunc := func(prev int) (int, error) {
-					fmt.Printf("  Polling: prev=%v, current=%v\n", prev, currentValue)
-					return currentValue, nil
-				}
-
-				// Don't skip signal for this demo to show reactive updates
-				skipSignal := false
-
-				return updateFunc, skipSignal, nil
+			func(callCtx wm.CallContext) (wm.CallHandle[int], error) {
+				return wm.CallHandle[int]{
+					Tick: 300 * time.Millisecond,
+					GetUpdateFunc: func(runCtx wm.RunContext) wm.UpdateFunc[int] {
+						// Simulate polling external data source
+						currentValue := externalCounter
+						externalCounter++
+						return func(prev shared.WatchValue[int]) (shared.WatchValue[int], bool) {
+							fmt.Printf("  Polling: prev=%v, current=%v\n", prev.Value, currentValue)
+							return shared.WatchValue[int]{Value: currentValue, VarName: "externalCounter"}, false
+						}
+					},
+				}, nil
 			},
 			"externalCounter",
 			300*time.Millisecond, // Poll every 300ms

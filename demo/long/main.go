@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"github.com/HershyOrg/watch"
+	"github.com/HershyOrg/watch/shared"
 	"github.com/HershyOrg/watch/util"
+	"github.com/HershyOrg/watch/wm"
 )
 
 const (
@@ -169,9 +171,13 @@ func mainReducer(
 	commandHandler *CommandHandler,
 ) error {
 	// WatchFlow: BTC price (real-time from WebSocket)
-	btcHV := watch.DELETED_WatchFlow(0.0, stream.GetBTCPriceStream(), "btc_price", ctx)
+	btcHV := watch.DELETED_WatchFlow[float64](0.0,
+		flowValueStreamToFlowHandle(stream.GetBTCPriceStream(), "btc_price"),
+		"btc_price", ctx)
 	// WatchFlow: ETH price (real-time from WebSocket)
-	ethHV := watch.DELETED_WatchFlow(0.0, stream.GetETHPriceStream(), "eth_price", ctx)
+	ethHV := watch.DELETED_WatchFlow[float64](0.0,
+		flowValueStreamToFlowHandle(stream.GetETHPriceStream(), "eth_price"),
+		"eth_price", ctx)
 	// WatchTick: Stats ticker (1 minute interval)
 	statsTick := util.WatchTick("stats_ticker", StatsInterval, ctx)
 	// WatchTick: Rebalance ticker (1 hour interval)
@@ -269,5 +275,42 @@ func handleUserInput(w *watch.Watcher) {
 
 	if err := scanner.Err(); err != nil {
 		fmt.Printf("⚠️  Input error: %v\n", err)
+	}
+}
+
+// flowValueStreamToFlowHandle adapts a FlowValue[T] stream function to a wm.GetFlowHandleFunc[T].
+// BinanceStream returns func(ctx) (<-chan FlowValue[T], error).
+// WatchFlow expects func(flowCtx) (FlowHandle[T], error) with FlowChan chan UpdateFunc[T].
+func flowValueStreamToFlowHandle(
+	getStream func(ctx context.Context) (<-chan shared.FlowValue[float64], error),
+	varName string,
+) wm.GetFlowHandleFunc[float64] {
+	return func(flowCtx wm.FlowContext) (wm.FlowHandle[float64], error) {
+		sourceCh, err := getStream(flowCtx)
+		if err != nil {
+			return wm.FlowHandle[float64]{}, err
+		}
+
+		updateCh := make(chan wm.UpdateFunc[float64], 100)
+
+		// Bridge: FlowValue → UpdateFunc
+		go func() {
+			defer close(updateCh)
+			for fv := range sourceCh {
+				val := fv // capture
+				fn := func(prev shared.WatchValue[float64]) (shared.WatchValue[float64], bool) {
+					if val.E != nil {
+						return shared.WatchValue[float64]{Error: val.E, VarName: varName}, false
+					}
+					if val.SkipSignal {
+						return prev, true
+					}
+					return shared.WatchValue[float64]{Value: val.V, VarName: varName}, false
+				}
+				updateCh <- fn
+			}
+		}()
+
+		return wm.FlowHandle[float64]{FlowChan: updateCh}, nil
 	}
 }
