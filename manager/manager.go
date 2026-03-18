@@ -4,59 +4,34 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/HershyOrg/watch/shared"
 	"github.com/HershyOrg/watch/wm"
 )
 
-// WatchHandle is an interface for different types of watch mechanisms.
-type WatchHandle interface {
-	GetVarName() string
-	GetCancelFunc() context.CancelFunc
-}
-
-// TickHandle represents a tick-based watch variable.
-type TickHandle struct {
-	VarName            string
-	GetComputationFunc wm.DELETED_GetComputationFunc
-	Tick               time.Duration
-	CancelFunc         context.CancelFunc
-}
-
-func (h *TickHandle) GetVarName() string                { return h.VarName }
-func (h *TickHandle) GetCancelFunc() context.CancelFunc { return h.CancelFunc }
-
-// FlowHandle represents a channel-based watch variable.
-type FlowHandle struct {
-	VarName        string
-	GetChannelFunc func(ctx context.Context) (<-chan shared.RawFlowValue, error)
-	CancelFunc     context.CancelFunc
-}
-
-func (h *FlowHandle) GetVarName() string                { return h.VarName }
-func (h *FlowHandle) GetCancelFunc() context.CancelFunc { return h.CancelFunc }
-
 // Manager encapsulates all Manager components.
 // It orchestrates the Reducer-MgrFuncRunner pattern for reactive execution.
+// Manager는 wm.Subscriber 인터페이스를 직접 구현한다.
 type Manager struct {
 	config *shared.WatcherConfig
+	name   string // managerName (Subscriber 식별용)
 
 	logger *Logger
 
 	state   *ManagerState
 	signals *SignalChannels
 
-	reducer *Reducer
-	funcRunner  *MgrfuncRnner
+	reducer    *Reducer
+	funcRunner *MgrfuncRnner
 
-	memoCache     sync.Map // map[string]any
-	watchRegistry sync.Map // map[string]WatchHandle
+	memoCache       sync.Map           // map[string]any
+	machineRegistry wm.MachineRegistry // Watcher가 설정
 }
 
 // NewManager creates a complete Manager with ManagedFunc.
 func NewManager(
 	config shared.WatcherConfig,
+	name string,
 	managedFunc ManagedFunc,
 	cleaner Cleaner,
 	envVars map[string]string,
@@ -66,8 +41,6 @@ func NewManager(
 	state := NewManagerState(shared.ControlIdle)
 	signals := NewSignalChannels(config.SignalChanCapacity)
 
-	reducer := NewReducer(state, signals, logger)
-
 	runner := NewRunner(
 		managedFunc,
 		cleaner,
@@ -76,15 +49,17 @@ func NewManager(
 	)
 
 	mgr := &Manager{
-		config:        &config,
-		logger:        logger,
-		state:         state,
-		signals:       signals,
-		reducer:       reducer,
-		funcRunner:        runner,
-		memoCache:     sync.Map{},
-		watchRegistry: sync.Map{},
+		config:    &config,
+		name:      name,
+		logger:    logger,
+		state:     state,
+		signals:   signals,
+		funcRunner: runner,
+		memoCache: sync.Map{},
 	}
+
+	// Reducer는 Manager 참조 필요 (MachineRegistry 접근용)
+	mgr.reducer = NewReducer(state, signals, logger, mgr)
 
 	// Set Manager reference in MgrFuncRunner for reinitialization
 	runner.SetManager(mgr)
@@ -104,9 +79,52 @@ func (m *Manager) Start(rootCtx context.Context) {
 	go m.reducer.Run(rootCtx, m.funcRunner)
 }
 
-// GetState returns the current ManagerState.
-func (m *Manager) GetState() *ManagerState {
+// GetManagerState returns the current ManagerState. 내부 사용 및 테스트용.
+func (m *Manager) GetManagerState() *ManagerState {
 	return m.state
+}
+
+// --- wm.Subscriber 인터페이스 구현 ---
+
+// GetState는 wm.Subscriber 인터페이스를 충족한다.
+func (m *Manager) GetState() (shared.ControlState, shared.RunnerState) {
+	return m.state.GetControlState(), m.funcRunner.GetRunnerState()
+}
+
+// ReadVarHistory는 wm.Subscriber 인터페이스를 충족한다.
+func (m *Manager) ReadVarHistory(varName string) ([]shared.RawWatchValue, error) {
+	if m.machineRegistry == nil {
+		return nil, fmt.Errorf("no machine registry")
+	}
+	machine, ok := m.machineRegistry.GetWatchMachine(varName)
+	if !ok {
+		return nil, fmt.Errorf("wm not found: %s", varName)
+	}
+	val, alreadyRead := machine.ReadLatestFor(m.name)
+	if alreadyRead {
+		return nil, nil
+	}
+	return []shared.RawWatchValue{val}, nil
+}
+
+// GetNewSigAppendChan은 wm.Subscriber 인터페이스를 충족한다.
+func (m *Manager) GetNewSigAppendChan() <-chan struct{} {
+	return m.signals.NewSigAppended
+}
+
+// GetName은 wm.Subscriber 인터페이스를 충족한다.
+func (m *Manager) GetName() string {
+	return m.name
+}
+
+// SetMachineRegistry는 Watcher가 Manager에 MachineRegistry를 설정할 때 사용.
+func (m *Manager) SetMachineRegistry(registry wm.MachineRegistry) {
+	m.machineRegistry = registry
+}
+
+// GetMachineRegistry는 MachineRegistry를 반환한다.
+func (m *Manager) GetMachineRegistry() wm.MachineRegistry {
+	return m.machineRegistry
 }
 
 // GetSignals returns the SignalChannels.
@@ -127,11 +145,6 @@ func (m *Manager) GetLogger() *Logger {
 // GetMemoCache returns a pointer to the memo cache.
 func (m *Manager) GetMemoCache() *sync.Map {
 	return &m.memoCache
-}
-
-// GetWatchRegistry returns a pointer to the watch registry.
-func (m *Manager) GetWatchRegistry() *sync.Map {
-	return &m.watchRegistry
 }
 
 // GetConfig returns the WatcherConfig.
@@ -163,47 +176,9 @@ func (m *Manager) GetMemo(key string) (any, bool) {
 	return m.memoCache.Load(key)
 }
 
-// RegisterWatch registers a Watch variable with limit enforcement.
-func (m *Manager) RegisterWatch(varName string, handle WatchHandle) error {
-	if _, exists := m.watchRegistry.Load(varName); exists {
-		return fmt.Errorf("watch varName already exists: %s", varName)
-	}
-
-	count := 0
-	m.watchRegistry.Range(func(_, _ any) bool {
-		count++
-		return true
-	})
-
-	if count >= m.config.MaxWatches {
-		return fmt.Errorf("watch registry limit reached: %d/%d (cannot register '%s')",
-			count, m.config.MaxWatches, varName)
-	}
-
-	m.watchRegistry.Store(varName, handle)
-	return nil
-}
-
 // Reinitialize clears all Manager state for restart.
+// NewSigAppended는 drain하지 않는다 (신호 보존).
 func (m *Manager) Reinitialize() {
 	m.state.VarState.Clear()
-
-	m.watchRegistry.Range(func(key, value any) bool {
-		handle := value.(WatchHandle)
-		if cancel := handle.GetCancelFunc(); cancel != nil {
-			cancel()
-		}
-		return true
-	})
-	m.watchRegistry = sync.Map{}
-
 	m.memoCache = sync.Map{}
-
-	for {
-		select {
-		case <-m.signals.VarSigChan:
-		default:
-			return
-		}
-	}
 }

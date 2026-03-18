@@ -6,7 +6,6 @@ import (
 	"runtime"
 
 	"github.com/HershyOrg/watch/shared"
-	"github.com/HershyOrg/watch/wm"
 )
 
 // ReduceAction represents a state transition that occurred.
@@ -24,21 +23,22 @@ type Reducer struct {
 	state   *ManagerState
 	signals *SignalChannels
 	logger  ReduceLogger
+	manager *Manager // MachineRegistry 접근용
 }
 
 // ReduceLogger handles logging of state transitions.
 type ReduceLogger interface {
 	LogReduce(action ReduceAction)
-	LogWatchError(varName string, phase WatchErrorPhase, err error)
 	LogStateTransitionFault(from, to shared.ControlState, reason string, err error)
 }
 
 // NewReducer creates a new Reducer.
-func NewReducer(state *ManagerState, signals *SignalChannels, logger ReduceLogger) *Reducer {
+func NewReducer(state *ManagerState, signals *SignalChannels, logger ReduceLogger, manager *Manager) *Reducer {
 	return &Reducer{
 		state:   state,
 		signals: signals,
 		logger:  logger,
+		manager: manager,
 	}
 }
 
@@ -105,14 +105,27 @@ func (r *Reducer) tryProcessNextEvent(runner *MgrfuncRnner) bool {
 		}
 	}
 
-	// Priority 2: VarSig (lowest)
+	// Priority 2: Var (Marker 기반)
 	if r.canProcessVarEvent(cs) {
-		select {
-		case event := <-r.signals.VarSigChan:
-			r.reduceAndExecute(event, runner)
+		// Drain: NewSigAppended 잔여 알림 소비
+		r.drainNewSigAppended()
+
+		// 각 WM에 ReadLatestFor 호출
+		updates := r.readLatestFromAllWMs()
+		if len(updates) > 0 {
+			r.state.VarState.BatchSet(updates)
+			r.state.SetControlState(shared.ControlRunDesired)
+
+			varNames := make([]string, 0, len(updates))
+			for v := range updates {
+				varNames = append(varNames, v)
+			}
+
+			triggeredSig := &shared.TriggeredSignal{VarSigNames: varNames}
+			r.reduceAndExecuteVar(triggeredSig, runner)
 			return true
-		default:
 		}
+		// 모든 WM이 (_, true) 반환 → 이미 최신 → 실행 안 함
 	}
 
 	return false
@@ -152,6 +165,28 @@ func (r *Reducer) reduceAndExecute(event interface{}, runner *MgrfuncRnner) {
 	r.reduceEffectDrivenEvent(drivenEvent, runner)
 }
 
+// reduceAndExecuteVar handles Var trigger: log and execute RunEffect.
+func (r *Reducer) reduceAndExecuteVar(triggeredSig *shared.TriggeredSignal, runner *MgrfuncRnner) {
+	prevSnapshot := r.state.Snapshot()
+	effect := &RunEffect{TriggeredSignal: triggeredSig}
+
+	action := ReduceAction{
+		PrevState:       prevSnapshot,
+		Event:           triggeredSig,
+		Effect:          effect,
+		NextState:       r.state.Snapshot(),
+		TriggeredSignal: triggeredSig,
+	}
+	if r.logger != nil {
+		r.logger.LogReduce(action)
+	}
+
+	drivenEvent := runner.Execute(effect)
+	if drivenEvent != nil {
+		r.reduceEffectDrivenEvent(drivenEvent, runner)
+	}
+}
+
 // reduceEffectDrivenEvent processes an EffectDrivenEvent recursively.
 func (r *Reducer) reduceEffectDrivenEvent(event EffectDrivenEvent, runner *MgrfuncRnner) {
 	prevSnapshot := r.state.Snapshot()
@@ -186,13 +221,10 @@ func (r *Reducer) reduceEffectDrivenEvent(event EffectDrivenEvent, runner *Mgrfu
 }
 
 // reduce processes a SemanticEvent: updates ControlState and returns the Effect to execute.
-// This absorbs the former EffectCommander's role.
 func (r *Reducer) reduce(event interface{}) (Effect, *shared.TriggeredSignal) {
 	switch e := event.(type) {
 	case *UserMessageReceived:
 		return r.reduceUserEvent(e)
-	case *wm.DELETED_VarSig:
-		return r.reduceVarEvent(e)
 	case *ControlEvent:
 		return r.reduceControlEvent(e)
 	}
@@ -207,32 +239,12 @@ func (r *Reducer) reduceUserEvent(event *UserMessageReceived) (Effect, *shared.T
 	return &RunEffect{TriggeredSignal: triggeredSig, Message: event.UserMessage}, triggeredSig
 }
 
-// reduceVarEvent handles VarSig with batching.
-func (r *Reducer) reduceVarEvent(sig *wm.DELETED_VarSig) (Effect, *shared.TriggeredSignal) {
-	updates := r.collectAndApplyVarSigs(sig)
-
-	if len(updates) > 0 {
-		r.state.VarState.BatchSet(updates)
-		r.state.SetControlState(shared.ControlRunDesired)
-
-		varNames := make([]string, 0, len(updates))
-		for varName := range updates {
-			varNames = append(varNames, varName)
-		}
-		triggeredSig := &shared.TriggeredSignal{VarSigNames: varNames}
-		return &RunEffect{TriggeredSignal: triggeredSig}, triggeredSig
-	}
-
-	return nil, nil
-}
-
 // reduceControlEvent handles external ControlEvents.
 func (r *Reducer) reduceControlEvent(event *ControlEvent) (Effect, *shared.TriggeredSignal) {
 	currentCS := r.state.GetControlState()
 
 	switch event.Kind {
 	case StopRequested:
-		// Already in terminal state? Ignore.
 		if currentCS.IsTerminal() {
 			return nil, nil
 		}
@@ -247,7 +259,6 @@ func (r *Reducer) reduceControlEvent(event *ControlEvent) (Effect, *shared.Trigg
 		return &CleanupEffect{ForState: shared.ControlKilled}, &shared.TriggeredSignal{IsWatcherSig: true}
 
 	case RunRequested:
-		// Only from terminal states
 		if !currentCS.IsTerminal() && currentCS != shared.ControlIdle {
 			return nil, nil
 		}
@@ -267,18 +278,18 @@ func (r *Reducer) reduceDriven(event EffectDrivenEvent) Effect {
 	switch e := event.(type) {
 	case *ExecutionCompleted:
 		r.state.SetControlState(shared.ControlIdle)
-		return nil // recursion ends: settled at Idle
+		return nil
 
 	case *ErrorSuppressed:
 		r.state.SetControlState(shared.ControlIdle)
-		return nil // recursion ends: settled at Idle
+		return nil
 
 	case *ExecutionFailed:
 		r.state.SetControlState(shared.ControlRecoverDesired)
 		return &RecoverEffect{}
 
 	case *CleanupCompleted:
-		r.state.SetControlState(e.ForState) // terminal state settlement
+		r.state.SetControlState(e.ForState)
 		return nil
 
 	case *RecoveryReady:
@@ -321,77 +332,42 @@ func (r *Reducer) canProcessVarEvent(cs shared.ControlState) bool {
 	return cs == shared.ControlIdle
 }
 
-// collectAndApplyVarSigs collects all VarSigs and applies them correctly.
-// For IsStateIndependent=true (Flow): only apply the last signal's function
-// For IsStateIndependent=false (Tick): apply all functions sequentially
-func (r *Reducer) collectAndApplyVarSigs(first *wm.DELETED_VarSig) map[string]shared.RawWatchValue {
-	sigs := []*wm.DELETED_VarSig{first}
-
-	// Collect all available VarSigs from the channel
+// drainNewSigAppended consumes all remaining NewSigAppended notifications.
+func (r *Reducer) drainNewSigAppended() {
 	for {
 		select {
-		case sig := <-r.signals.VarSigChan:
-			sigs = append(sigs, sig)
+		case <-r.signals.NewSigAppended:
 		default:
-			goto APPLY
+			return
 		}
 	}
+}
 
-APPLY:
-	// Group signals by variable name
-	byVar := make(map[string][]*wm.DELETED_VarSig)
-	for _, sig := range sigs {
-		byVar[sig.TargetVarName] = append(byVar[sig.TargetVarName], sig)
+// readLatestFromAllWMs reads the latest value from all WMs via MachineRegistry.
+// Uses Marker-based index comparison: if subscriber already read latest, skip.
+func (r *Reducer) readLatestFromAllWMs() map[string]shared.RawWatchValue {
+	if r.manager == nil {
+		return nil
+	}
+	registry := r.manager.GetMachineRegistry()
+	if registry == nil {
+		return nil
 	}
 
+	machines := registry.GetAllWatchMachines()
+	managerName := r.manager.GetName()
 	updates := make(map[string]shared.RawWatchValue)
 
-	for varName, varSigs := range byVar {
-		isIndependent := varSigs[0].DELETED_ISStateIndependent
-
-		if isIndependent {
-			// State-independent (Flow): only apply the last signal
-			lastSig := varSigs[len(varSigs)-1]
-
-			currentHV, exists := r.state.VarState.Get(varName)
-			if !exists {
-				currentHV = shared.RawWatchValue{}
-			}
-
-			nextHV := lastSig.DELETED_VarUpdateFunc(currentHV)
-
-			if nextHV.Error != nil {
-				if r.logger != nil {
-					r.logger.LogWatchError(varName, ErrorPhaseExecuteComputeFunc, nextHV.Error)
-				}
-				updates[varName] = shared.RawWatchValue{Value: nil, Error: nextHV.Error}
-				continue
-			}
-
-			updates[varName] = nextHV
-
-		} else {
-			// State-dependent (Tick): apply all signals sequentially
-			currentHV, exists := r.state.VarState.Get(varName)
-			if !exists {
-				currentHV = shared.RawWatchValue{}
-			}
-
-			for _, sig := range varSigs {
-				nextHV := sig.DELETED_VarUpdateFunc(currentHV)
-				if nextHV.Error != nil {
-					if r.logger != nil {
-						r.logger.LogWatchError(varName, ErrorPhaseExecuteComputeFunc, nextHV.Error)
-					}
-					currentHV = shared.RawWatchValue{Value: nil, Error: nextHV.Error}
-					continue
-				}
-				currentHV = nextHV
-			}
-
-			updates[varName] = currentHV
+	for _, machine := range machines {
+		val, alreadyRead := machine.ReadLatestFor(managerName)
+		if alreadyRead {
+			continue
 		}
+		updates[machine.VarName] = val
 	}
 
+	if len(updates) == 0 {
+		return nil
+	}
 	return updates
 }

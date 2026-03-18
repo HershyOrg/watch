@@ -10,6 +10,7 @@ import (
 	"github.com/HershyOrg/watch/api"
 	"github.com/HershyOrg/watch/manager"
 	"github.com/HershyOrg/watch/shared"
+	"github.com/HershyOrg/watch/wm"
 )
 
 // WatcherAPIServer provides HTTP API for Watcher monitoring and control
@@ -84,7 +85,7 @@ type signalsAdapter struct {
 }
 
 func (sa *signalsAdapter) GetVarSigCount() int {
-	return len(sa.signals.VarSigChan)
+	return 0
 }
 
 func (sa *signalsAdapter) GetUserSigCount() int {
@@ -99,30 +100,12 @@ func (sa *signalsAdapter) PeekSignals(maxCount int) []api.SignalEntry {
 	entries := []api.SignalEntry{}
 
 	// Peek from each channel (non-blocking read and write back)
-	varCount := len(sa.signals.VarSigChan)
 	userCount := len(sa.signals.UserEventChan)
 	watcherCount := len(sa.signals.ControlEventChan)
 
 	// Distribute maxCount across channels proportionally
-	varLimit := min(varCount, maxCount/3)
-	userLimit := min(userCount, maxCount/3)
-	watcherLimit := min(watcherCount, maxCount/3)
-
-	// Peek VarSig
-	for i := 0; i < varLimit && i < varCount; i++ {
-		select {
-		case sig := <-sa.signals.VarSigChan:
-			entries = append(entries, api.SignalEntry{
-				Type:      "var",
-				Content:   sig.String(),
-				CreatedAt: sig.CreatedAt(),
-			})
-			// Write back to preserve the signal
-			sa.signals.VarSigChan <- sig
-		default:
-			break
-		}
-	}
+	userLimit := min(userCount, maxCount/2)
+	watcherLimit := min(watcherCount, maxCount/2)
 
 	// Peek UserSig
 	for i := 0; i < userLimit && i < userCount; i++ {
@@ -170,26 +153,27 @@ type managerAdapter struct {
 }
 
 func (ma *managerAdapter) GetWatchRegistry() api.WatchRegistryInterface {
-	return &watchRegistryAdapter{registry: ma.manager.GetWatchRegistry()}
+	return &watchRegistryAdapter{registry: ma.manager.GetMachineRegistry()}
 }
 
 func (ma *managerAdapter) GetMemoCache() api.MemoCacheInterface {
 	return &memoCacheAdapter{cache: ma.manager.GetMemoCache()}
 }
 
-// watchRegistryAdapter adapts sync.Map watch registry
+// watchRegistryAdapter adapts wm.MachineRegistry
 type watchRegistryAdapter struct {
-	registry *sync.Map
+	registry wm.MachineRegistry
 }
 
 func (wra *watchRegistryAdapter) GetAllVarNames() []string {
-	varNames := []string{}
-	wra.registry.Range(func(key, value interface{}) bool {
-		if handle, ok := value.(manager.WatchHandle); ok {
-			varNames = append(varNames, handle.GetVarName())
-		}
-		return true
-	})
+	if wra.registry == nil {
+		return []string{}
+	}
+	machines := wra.registry.GetAllWatchMachines()
+	varNames := make([]string, 0, len(machines))
+	for _, m := range machines {
+		varNames = append(varNames, m.VarName)
+	}
 	return varNames
 }
 
@@ -262,7 +246,7 @@ func (w *Watcher) StartAPIServer() (*WatcherAPIServer, error) {
 	loggerAdp := &loggerAdapter{logger: w.manager.GetLogger()}
 	signalsAdp := &signalsAdapter{signals: w.manager.GetSignals()}
 	managerAdp := &managerAdapter{manager: w.manager}
-	varStateAdp := &varStateAdapter{state: w.manager.GetState().VarState}
+	varStateAdp := &varStateAdapter{state: w.manager.GetManagerState().VarState}
 	configAdp := &configAdapter{config: &w.config}
 
 	// Create handlers with closures

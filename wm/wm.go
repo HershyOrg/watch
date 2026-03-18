@@ -2,7 +2,11 @@ package wm
 
 import (
 	"context"
+	"sync"
+	"sync/atomic"
 	"time"
+
+	"github.com/HershyOrg/watch/shared"
 )
 
 // WatchMachine은 Watch와 관련한 기능을 한데 모은 구조체임.
@@ -58,6 +62,13 @@ type WatchMachine struct {
 	GcChecker GcCheckerInterface
 	//PublishersChecker를 통해 자신을 Export한 Manager가 죽었는지 체크함.
 	PublishersChecker PublishersCheckerInterface
+
+	//appendIndex는 LoopHistory에 Append될 때마다 단조증가하는 인덱스.
+	//Marker와 비교하여 구독자가 최신값을 이미 읽었는지 판단함.
+	appendIndex atomic.Uint64
+
+	//marker는 구독자별 최종 읽은 인덱스를 기록한다.
+	marker *Marker
 }
 
 type LoopContextConfig struct {
@@ -95,18 +106,6 @@ func NewWatchMachine(cfg WatchMachineConfig) *WatchMachine {
 	notifyChs := make([]chan struct{}, 0)
 	eventChan := make(chan LoopEvent, 100)
 
-	loop := NewWatchLoop(
-		cfg.VarName,
-		cfg.WatchType,
-		cfg.GetRawCallHandleOrNil,
-		cfg.GetRawFlowHandleOrNil,
-		cfg.LoopCtxConfig,
-		history,
-		&notifyChs,
-		cfg.RecoveryPolicy,
-		eventChan,
-	)
-
 	wm := &WatchMachine{
 		VarName:               cfg.VarName,
 		WatchType:             cfg.WatchType,
@@ -116,13 +115,27 @@ func NewWatchMachine(cfg WatchMachineConfig) *WatchMachine {
 			loopHistory:    history,
 			recoveryPolicy: cfg.RecoveryPolicy,
 		},
-		loop:             loop,
 		currentLoopState: &LoopIdle{},
 		loopHistory:      history,
 		loopCtxConfig:    cfg.LoopCtxConfig,
 		eventChan:        eventChan,
 		notifyChs:        notifyChs,
+		marker:           NewMarker(),
 	}
+
+	// loop 생성 (appendIndex 참조 전달을 위해 wm 생성 후)
+	wm.loop = NewWatchLoop(
+		cfg.VarName,
+		cfg.WatchType,
+		cfg.GetRawCallHandleOrNil,
+		cfg.GetRawFlowHandleOrNil,
+		cfg.LoopCtxConfig,
+		history,
+		&notifyChs,
+		cfg.RecoveryPolicy,
+		eventChan,
+		&wm.appendIndex,
+	)
 
 	// 이벤트 루프 시작
 	ctx, cancel := context.WithCancel(context.Background())
@@ -206,5 +219,62 @@ func (wm *WatchMachine) AddNotifyCh(ch chan struct{}) {
 func (wm *WatchMachine) Close() {
 	if wm.cancelEventLoop != nil {
 		wm.cancelEventLoop()
+	}
+}
+
+// GetLoopHistoryRef는 LoopHistory 참조를 반환함.
+func (wm *WatchMachine) GetLoopHistoryRef() *LoopHistory {
+	return wm.loopHistory
+}
+
+// GetAppendIndex는 현재 appendIndex를 반환함.
+func (wm *WatchMachine) GetAppendIndex() uint64 {
+	return wm.appendIndex.Load()
+}
+
+// IncrementAppendIndex는 appendIndex를 1 증가시킴. WatchLoop에서 Append 후 호출.
+func (wm *WatchMachine) IncrementAppendIndex() {
+	wm.appendIndex.Add(1)
+}
+
+// ReadLatestFor는 구독자에게 최신값을 반환한다.
+// 이미 읽었으면 (zero, true) — "이미 최신"
+// 안 읽었으면 마킹 후 (value, false) — "새 값"
+func (wm *WatchMachine) ReadLatestFor(subscriberName string) (shared.RawWatchValue, bool) {
+	wm.marker.mu.Lock()
+	defer wm.marker.mu.Unlock()
+
+	currentIndex := wm.appendIndex.Load()
+	lastRead := wm.marker.lastRead[subscriberName]
+
+	if lastRead >= currentIndex {
+		return shared.RawWatchValue{}, true
+	}
+
+	val := wm.loopHistory.LastValue()
+	wm.marker.lastRead[subscriberName] = currentIndex
+	return val, false
+}
+
+// Subscribe는 구독자를 등록한다. Marker 생성 + notifyCh 등록 + Subscribers 추가.
+func (wm *WatchMachine) Subscribe(sub Subscriber, notifyCh chan struct{}) {
+	wm.marker.mu.Lock()
+	wm.marker.lastRead[sub.GetName()] = 0
+	wm.marker.mu.Unlock()
+
+	*wm.loop.notifyChs = append(*wm.loop.notifyChs, notifyCh)
+	wm.Subscribers = append(wm.Subscribers, sub)
+}
+
+// Marker는 구독자별 최종 읽은 인덱스를 기록한다.
+type Marker struct {
+	mu       sync.RWMutex
+	lastRead map[string]uint64 // subscriberName -> lastReadIndex
+}
+
+// NewMarker는 새 Marker를 생성한다.
+func NewMarker() *Marker {
+	return &Marker{
+		lastRead: make(map[string]uint64),
 	}
 }

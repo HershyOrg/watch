@@ -3,6 +3,7 @@ package wm
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/HershyOrg/watch/shared"
@@ -21,6 +22,7 @@ type WatchLoop struct {
 	varName               string
 	recoveryPolicy        LoopRecoveryPolicy
 	eventChan             chan<- LoopEvent // WatchMachine의 eventChan 참조
+	appendIndex           *atomic.Uint64  // WatchMachine의 appendIndex 참조
 
 	// 런타임 상태
 	rootCtx    context.Context
@@ -38,6 +40,7 @@ func NewWatchLoop(
 	notifyChs *[]chan struct{},
 	recoveryPolicy LoopRecoveryPolicy,
 	eventChan chan<- LoopEvent,
+	appendIndex *atomic.Uint64,
 ) *WatchLoop {
 	return &WatchLoop{
 		varName:               varName,
@@ -49,6 +52,7 @@ func NewWatchLoop(
 		notifyChs:             notifyChs,
 		recoveryPolicy:        recoveryPolicy,
 		eventChan:             eventChan,
+		appendIndex:           appendIndex,
 	}
 }
 
@@ -130,6 +134,7 @@ func (wl *WatchLoop) recordGetHandleErr(err error) {
 		},
 	}
 	wl.loopHistory.Append(errSnapshot)
+	wl.appendIndex.Add(1)
 	wl.notifySubscribers()
 }
 
@@ -188,6 +193,7 @@ func (wl *WatchLoop) processCallTick(handle RawCallHandle) time.Duration {
 		ReturnedValue: next,
 	}
 	wl.loopHistory.Append(snapshot)
+	wl.appendIndex.Add(1)
 	wl.notifySubscribers()
 
 	// 5) 에러 시 리커버리 판단
@@ -257,6 +263,7 @@ func (wl *WatchLoop) processFlowUpdate(updateFunc RawUpdateFunc) time.Duration {
 		ReturnedValue: next,
 	}
 	wl.loopHistory.Append(snapshot)
+	wl.appendIndex.Add(1)
 	wl.notifySubscribers()
 
 	if next.Error != nil {

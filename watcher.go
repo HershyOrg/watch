@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/HershyOrg/watch/manager"
+	"github.com/HershyOrg/watch/shared"
+	"github.com/HershyOrg/watch/wm"
 )
 
 // Watcher is the core reactive framework engine.
@@ -20,6 +21,9 @@ type Watcher struct {
 
 	// State
 	isRunning atomic.Bool // watcher자체가 실행중인지의 값. (Run/ Stop)
+
+	// WatchMachine Registry
+	machineRegistry *shared.SafeMap[string, *wm.WatchMachine]
 
 	// Lifecycle
 	rootCtx    context.Context
@@ -50,10 +54,11 @@ func NewWatcher(config WatcherConfig, parentCtx context.Context) *Watcher {
 	rootCtx, cancel := context.WithCancel(context.Background())
 
 	w := &Watcher{
-		config:     config,
-		manager:    nil, // Manager created in Manage()
-		rootCtx:    rootCtx,
-		rootCancel: cancel,
+		config:          config,
+		manager:         nil, // Manager created in Manage()
+		machineRegistry: shared.NewSafeMap[string, *wm.WatchMachine](),
+		rootCtx:         rootCtx,
+		rootCancel:      cancel,
 	}
 
 	// Auto-shutdown goroutine: monitors parent context
@@ -98,10 +103,13 @@ func (w *Watcher) Manage(fn manager.ManagedFunc, name string, envVars map[string
 
 	w.manager = manager.NewManager(
 		w.config,
+		name,
 		wrappedFn,
 		nil, // Cleaner set via CleanupBuilder
 		envVars,
 	)
+
+	w.manager.SetMachineRegistry(w)
 
 	return manager.NewCleanupBuilder(w.manager)
 }
@@ -143,7 +151,7 @@ func (w *Watcher) Stop() error {
 	}
 
 	// Check if Manager is already in a terminal state
-	currentState := w.manager.GetState().GetControlState()
+	currentState := w.manager.GetManagerState().GetControlState()
 	if currentState.IsTerminal() {
 		// Already stopped - just clean up Watcher resources
 		if w.apiServer != nil {
@@ -173,7 +181,7 @@ func (w *Watcher) Stop() error {
 	for {
 		select {
 		case <-ticker.C:
-			cs := w.manager.GetState().GetControlState()
+			cs := w.manager.GetManagerState().GetControlState()
 			if cs.IsTerminal() && w.manager.GetRunner().IsCleanupCompleted() {
 				goto StopCompleted
 			}
@@ -251,7 +259,7 @@ func (w *Watcher) SendMessage(content string) error {
 
 // GetState returns the current ControlState.
 func (w *Watcher) GetState() ControlState {
-	return w.manager.GetState().GetControlState()
+	return w.manager.GetManagerState().GetControlState()
 }
 
 // GetLogger returns the Watcher's logger for inspection.
@@ -275,7 +283,7 @@ func (w *Watcher) StopManager() error {
 		return fmt.Errorf("watcher not running")
 	}
 
-	currentState := w.manager.GetState().GetControlState()
+	currentState := w.manager.GetManagerState().GetControlState()
 	if currentState.IsTerminal() {
 		return nil // Already stopped
 	}
@@ -295,7 +303,7 @@ func (w *Watcher) RunManager() error {
 		return fmt.Errorf("watcher not running")
 	}
 
-	currentState := w.manager.GetState().GetControlState()
+	currentState := w.manager.GetManagerState().GetControlState()
 	if !currentState.IsTerminal() {
 		return fmt.Errorf("can only run from terminal states, current: %s", currentState)
 	}
@@ -330,7 +338,7 @@ func (w *Watcher) waitForState(targetState ControlState, timeout time.Duration) 
 	for {
 		select {
 		case <-ticker.C:
-			currentState := w.manager.GetState().GetControlState()
+			currentState := w.manager.GetManagerState().GetControlState()
 			if currentState == targetState {
 				return nil
 			}
@@ -341,7 +349,7 @@ func (w *Watcher) waitForState(targetState ControlState, timeout time.Duration) 
 				return fmt.Errorf("manager killed while waiting for state %s", targetState)
 			}
 		case <-deadline:
-			currentState := w.manager.GetState().GetControlState()
+			currentState := w.manager.GetManagerState().GetControlState()
 			return fmt.Errorf("timeout waiting for state %s (current: %s)", targetState, currentState)
 		}
 	}
@@ -356,38 +364,24 @@ func (w *Watcher) waitForTerminalState(timeout time.Duration) error {
 	for {
 		select {
 		case <-ticker.C:
-			if w.manager.GetState().GetControlState().IsTerminal() {
+			if w.manager.GetManagerState().GetControlState().IsTerminal() {
 				return nil
 			}
 		case <-deadline:
-			currentState := w.manager.GetState().GetControlState()
+			currentState := w.manager.GetManagerState().GetControlState()
 			return fmt.Errorf("timeout waiting for terminal state (current: %s)", currentState)
 		}
 	}
 }
 
-// stopAllWatches stops all Watch goroutines with 1 minute timeout.
+// stopAllWatches stops all WatchMachines with 1 minute timeout.
 func (w *Watcher) stopAllWatches() {
-	var wg sync.WaitGroup
-	watchRegistry := w.manager.GetWatchRegistry()
-
-	watchRegistry.Range(func(key, value any) bool {
-		handle := value.(manager.WatchHandle)
-		wg.Add(1)
-
-		go func(h manager.WatchHandle) {
-			defer wg.Done()
-			if cancelFunc := h.GetCancelFunc(); cancelFunc != nil {
-				cancelFunc()
-			}
-		}(handle)
-
-		return true
-	})
-
 	done := make(chan struct{})
 	go func() {
-		wg.Wait()
+		w.machineRegistry.Range(func(varName string, machine *wm.WatchMachine) bool {
+			machine.Stop()
+			return true
+		})
 		close(done)
 	}()
 
@@ -397,4 +391,34 @@ func (w *Watcher) stopAllWatches() {
 	case <-time.After(1 * time.Minute):
 		fmt.Println("[Watcher] Warning: Some watches did not stop within 1min timeout")
 	}
+}
+
+// --- wm.MachineRegistry interface implementation ---
+
+// RegisterWatchMachine registers a WatchMachine to the Watcher's registry.
+func (w *Watcher) RegisterWatchMachine(managerName string, watchMachine *wm.WatchMachine) error {
+	if watchMachine == nil {
+		return fmt.Errorf("watchMachine is nil")
+	}
+	w.machineRegistry.Store(watchMachine.VarName, watchMachine)
+	return nil
+}
+
+// GetWatchMachine returns the WatchMachine for the given varName.
+func (w *Watcher) GetWatchMachine(varName string) (*wm.WatchMachine, bool) {
+	return w.machineRegistry.Load(varName)
+}
+
+// GetAllWatchMachines returns all registered WatchMachines.
+func (w *Watcher) GetAllWatchMachines() []*wm.WatchMachine {
+	return w.machineRegistry.Values()
+}
+
+// UnregisterWatchMachine removes a WatchMachine from the registry.
+func (w *Watcher) UnregisterWatchMachine(varName string) error {
+	if _, ok := w.machineRegistry.Load(varName); !ok {
+		return fmt.Errorf("watchMachine not found: %s", varName)
+	}
+	w.machineRegistry.Delete(varName)
+	return nil
 }

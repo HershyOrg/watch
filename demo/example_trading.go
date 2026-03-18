@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/HershyOrg/watch"
-	"github.com/HershyOrg/watch/wm"
 )
 
 // Trading strategy configuration
@@ -76,7 +75,7 @@ func tradingFunc(msg *watch.Message, ctx watch.ManageContext) error {
 	// Watch Bitcoin price - always outside conditional logic (generic version)
 	priceHV := watch.DELELTED_WatchCall[float64](
 		0.0, // Initial price value
-		func() (wm.DELETED_VarUpdateFunc[float64], bool, error) {
+		func() (func(float64) (float64, error), bool, error) {
 			// 네트워크 요청은 미리 해둔 후, func엔 가능한 계산만 남기는게 성능상 유리.
 			price, err := client.GetBitcoinPrice()
 			if err != nil {

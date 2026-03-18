@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/HershyOrg/watch"
-	"github.com/HershyOrg/watch/wm"
 )
 
 // Advanced example demonstrating WatchCall reactive mechanism
@@ -25,7 +24,7 @@ func main1() {
 		// WatchCall monitors external value and triggers re-execution on change (generic version)
 		hv := watch.DELELTED_WatchCall[int](
 			0, // Initial counter value
-			func() (wm.DELETED_VarUpdateFunc[int], bool, error) {
+			func() (func(int) (int, error), bool, error) {
 				// Simulate polling external data source
 				currentValue := externalCounter
 				externalCounter++
