@@ -171,11 +171,11 @@ func mainReducer(
 	commandHandler *CommandHandler,
 ) error {
 	// WatchFlow: BTC price (real-time from WebSocket)
-	btcHV := watch.DELETED_WatchFlow[float64](0.0,
+	btcHV := watch.WatchFlow[float64](0.0,
 		flowValueStreamToFlowHandle(stream.GetBTCPriceStream(), "btc_price"),
 		"btc_price", ctx)
 	// WatchFlow: ETH price (real-time from WebSocket)
-	ethHV := watch.DELETED_WatchFlow[float64](0.0,
+	ethHV := watch.WatchFlow[float64](0.0,
 		flowValueStreamToFlowHandle(stream.GetETHPriceStream(), "eth_price"),
 		"eth_price", ctx)
 	// WatchTick: Stats ticker (1 minute interval)
@@ -280,15 +280,15 @@ func handleUserInput(w *watch.Watcher) {
 
 // flowValueStreamToFlowHandle adapts a FlowValue[T] stream function to a wm.GetFlowHandleFunc[T].
 // BinanceStream returns func(ctx) (<-chan FlowValue[T], error).
-// WatchFlow expects func(flowCtx) (FlowHandle[T], error) with FlowChan chan UpdateFunc[T].
+// WatchFlow expects func(flowCtx) (chan UpdateFunc[T], error).
 func flowValueStreamToFlowHandle(
 	getStream func(ctx context.Context) (<-chan shared.FlowValue[float64], error),
 	varName string,
-) wm.GetFlowHandleFunc[float64] {
-	return func(flowCtx wm.FlowContext) (wm.FlowHandle[float64], error) {
+) wm.GetFlowChan[float64] {
+	return func(flowCtx wm.FlowContext) (chan wm.UpdateFunc[float64], error) {
 		sourceCh, err := getStream(flowCtx)
 		if err != nil {
-			return wm.FlowHandle[float64]{}, err
+			return nil, err
 		}
 
 		updateCh := make(chan wm.UpdateFunc[float64], 100)
@@ -311,6 +311,6 @@ func flowValueStreamToFlowHandle(
 			}
 		}()
 
-		return wm.FlowHandle[float64]{FlowChan: updateCh}, nil
+		return updateCh, nil
 	}
 }

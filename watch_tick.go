@@ -19,12 +19,12 @@ func WatchTick(
 
 	init := shared.TickValue{Time: time.Now(), NotUpdated: true, VarName: varName}
 
-	return DELELTED_WatchCall[shared.TickValue](
+	return WatchCall[shared.TickValue](
 		init,
-		func(callCtx wm.CallContext) (wm.CallHandle[shared.TickValue], error) {
-			return wm.CallHandle[shared.TickValue]{
-				Tick: tick,
-				GetUpdateFunc: func(runCtx wm.RunContext) wm.UpdateFunc[shared.TickValue] {
+		func(callCtx wm.CallContext) (func(runCtx wm.RunContext) wm.UpdateFunc[shared.TickValue], error) {
+
+			return func(runCtx wm.RunContext) wm.UpdateFunc[shared.TickValue] {
+
 					return func(prev shared.WatchValue[shared.TickValue]) (shared.WatchValue[shared.TickValue], bool) {
 						count := atomic.AddInt64(&tickCount, 1)
 						return shared.WatchValue[shared.TickValue]{
@@ -37,7 +37,7 @@ func WatchTick(
 						}, false
 					}
 				},
-			}, nil
+				nil
 		},
 		varName,
 		tick,

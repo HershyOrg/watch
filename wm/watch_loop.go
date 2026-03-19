@@ -22,7 +22,7 @@ type WatchLoop struct {
 	varName               string
 	recoveryPolicy        LoopRecoveryPolicy
 	eventChan             chan<- LoopEvent // WatchMachine의 eventChan 참조
-	appendIndex           *atomic.Uint64  // WatchMachine의 appendIndex 참조
+	appendIndex           *atomic.Uint64   // WatchMachine의 appendIndex 참조
 
 	// 런타임 상태
 	rootCtx    context.Context
@@ -404,7 +404,7 @@ func (wl *WatchLoop) safeGetUpdateFunc(handle RawCallHandle, rc RunContext) RawU
 				panicErr = fmt.Errorf("panic in GetRawUpdateFunc: %v", r)
 			}
 		}()
-		fn = handle.GetRawUpdateFunc(rc)
+		fn = handle.NewRawUpdateFunc(rc)
 	}()
 
 	if panicErr != nil {

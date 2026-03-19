@@ -24,20 +24,17 @@ func main1() {
 		fmt.Printf("\n[Managed Function Execution]\n")
 
 		// WatchCall monitors external value and triggers re-execution on change
-		hv := watch.DELELTED_WatchCall[int](
+		hv := watch.WatchCall[int](
 			0, // Initial counter value
-			func(callCtx wm.CallContext) (wm.CallHandle[int], error) {
-				return wm.CallHandle[int]{
-					Tick: 300 * time.Millisecond,
-					GetUpdateFunc: func(runCtx wm.RunContext) wm.UpdateFunc[int] {
-						// Simulate polling external data source
-						currentValue := externalCounter
-						externalCounter++
-						return func(prev shared.WatchValue[int]) (shared.WatchValue[int], bool) {
-							fmt.Printf("  Polling: prev=%v, current=%v\n", prev.Value, currentValue)
-							return shared.WatchValue[int]{Value: currentValue, VarName: "externalCounter"}, false
-						}
-					},
+			func(callCtx wm.CallContext) (func(runCtx wm.RunContext) wm.UpdateFunc[int], error) {
+				return func(runCtx wm.RunContext) wm.UpdateFunc[int] {
+					// Simulate polling external data source
+					currentValue := externalCounter
+					externalCounter++
+					return func(prev shared.WatchValue[int]) (shared.WatchValue[int], bool) {
+						fmt.Printf("  Polling: prev=%v, current=%v\n", prev.Value, currentValue)
+						return shared.WatchValue[int]{Value: currentValue, VarName: "externalCounter"}, false
+					}
 				}, nil
 			},
 			"externalCounter",

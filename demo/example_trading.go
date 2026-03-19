@@ -75,29 +75,26 @@ func tradingFunc(msg *watch.Message, ctx watch.ManageContext) error {
 	state := stateVal.(*TradingState)
 
 	// Watch Bitcoin price - always outside conditional logic (generic version)
-	priceHV := watch.DELELTED_WatchCall[float64](
+	priceHV := watch.WatchCall[float64](
 		0.0, // Initial price value
-		func(callCtx wm.CallContext) (wm.CallHandle[float64], error) {
-			return wm.CallHandle[float64]{
-				Tick: 500 * time.Millisecond,
-				GetUpdateFunc: func(runCtx wm.RunContext) wm.UpdateFunc[float64] {
-					// 네트워크 요청은 여기서 미리 수행
-					price, err := client.GetBitcoinPrice()
-					if err != nil {
-						return func(prev shared.WatchValue[float64]) (shared.WatchValue[float64], bool) {
-							return shared.WatchValue[float64]{Error: err, VarName: "btcPrice"}, false
-						}
-					}
+		func(callCtx wm.CallContext) (func(runCtx wm.RunContext) wm.UpdateFunc[float64], error) {
+			return func(runCtx wm.RunContext) wm.UpdateFunc[float64] {
+				// 네트워크 요청은 여기서 미리 수행
+				price, err := client.GetBitcoinPrice()
+				if err != nil {
 					return func(prev shared.WatchValue[float64]) (shared.WatchValue[float64], bool) {
-						if prev.Value > 0 {
-							if abs(price-prev.Value) > 100.0 {
-								fmt.Printf("  [Watch] Price changed: $%.2f → $%.2f (Δ $%.2f)\n",
-									prev.Value, price, price-prev.Value)
-							}
-						}
-						return shared.WatchValue[float64]{Value: price, VarName: "btcPrice"}, false
+						return shared.WatchValue[float64]{Error: err, VarName: "btcPrice"}, false
 					}
-				},
+				}
+				return func(prev shared.WatchValue[float64]) (shared.WatchValue[float64], bool) {
+					if prev.Value > 0 {
+						if abs(price-prev.Value) > 100.0 {
+							fmt.Printf("  [Watch] Price changed: $%.2f → $%.2f (Δ $%.2f)\n",
+								prev.Value, price, price-prev.Value)
+						}
+					}
+					return shared.WatchValue[float64]{Value: price, VarName: "btcPrice"}, false
+				}
 			}, nil
 		},
 		"btcPrice",

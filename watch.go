@@ -16,24 +16,12 @@ func getManagerFromContext(ctx shared.ManageContext) *manager.Manager {
 	return nil
 }
 
-// getRegistryFromContext extracts the MachineRegistry from ManageContext.
-func getRegistryFromContext(ctx shared.ManageContext) wm.MachineRegistry {
-	raw := ctx.GetMachineRegistry()
-	if raw == nil {
-		return nil
-	}
-	if reg, ok := raw.(wm.MachineRegistry); ok {
-		return reg
-	}
-	return nil
-}
-
-// DELELTED_WatchCall monitors a value via tick-based polling using WatchMachine.
+// WatchCall monitors a value via tick-based polling using WatchMachine.
 // MFunc 내에서 호출. WM이 없으면 생성+등록+구독+Start.
 // VarState에 값이 없으면 init 반환.
-func DELELTED_WatchCall[T any](
+func WatchCall[T any](
 	init T,
-	getCallHandle wm.GetCallHandleFunc[T],
+	getNewUpdateFunc wm.GetNewUpdateFunc[T],
 	varName string,
 	tick time.Duration,
 	runCtx shared.ManageContext,
@@ -43,18 +31,18 @@ func DELELTED_WatchCall[T any](
 		return shared.WatchValue[T]{Value: init, NotUpdated: true, VarName: varName}
 	}
 
-	registry := getRegistryFromContext(runCtx)
+	registry := mgr.GetMachineRegistry()
 	if registry == nil {
 		return shared.WatchValue[T]{Value: init, NotUpdated: true, VarName: varName}
 	}
 
 	// WM이 없으면 생성
 	if _, exists := registry.GetWatchMachine(varName); !exists {
-		rawGetHandle := convertCallHandleToRaw(getCallHandle, varName, tick)
+		getRawCallHandle := parseGetRawCallHandle(getNewUpdateFunc, varName, tick)
 		machine := wm.NewWatchMachine(wm.WatchMachineConfig{
 			VarName:               varName,
 			WatchType:             wm.WatchCallType,
-			GetRawCallHandleOrNil: rawGetHandle,
+			GetRawCallHandleOrNil: getRawCallHandle,
 			LoopCtxConfig:         wm.LoopContextConfig{RunContextTimeout: 1 * time.Minute},
 		})
 		registry.RegisterWatchMachine(mgr.GetName(), machine)
@@ -66,10 +54,10 @@ func DELELTED_WatchCall[T any](
 	return readVarStateOrInit[T](mgr, varName, init)
 }
 
-// DELETED_WatchFlow monitors a value via channel-based flow using WatchMachine.
-func DELETED_WatchFlow[T any](
+// WatchFlow monitors a value via channel-based flow using WatchMachine.
+func WatchFlow[T any](
 	init T,
-	getFlowHandleFunc wm.GetFlowHandleFunc[T],
+	getFlowHandleFunc wm.GetFlowChan[T],
 	varName string,
 	runCtx shared.ManageContext,
 ) shared.WatchValue[T] {
@@ -78,17 +66,17 @@ func DELETED_WatchFlow[T any](
 		return shared.WatchValue[T]{Value: init, NotUpdated: true, VarName: varName}
 	}
 
-	registry := getRegistryFromContext(runCtx)
+	registry := mgr.GetMachineRegistry()
 	if registry == nil {
 		return shared.WatchValue[T]{Value: init, NotUpdated: true, VarName: varName}
 	}
 
 	if _, exists := registry.GetWatchMachine(varName); !exists {
-		rawGetHandle := convertFlowHandleToRaw(getFlowHandleFunc, varName)
+		getRawFlowHandle := parseGetRawFlowHandle(getFlowHandleFunc, varName)
 		machine := wm.NewWatchMachine(wm.WatchMachineConfig{
 			VarName:               varName,
 			WatchType:             wm.WatchFlowType,
-			GetRawFlowHandleOrNil: rawGetHandle,
+			GetRawFlowHandleOrNil: getRawFlowHandle,
 			LoopCtxConfig:         wm.LoopContextConfig{RunContextTimeout: 1 * time.Minute},
 		})
 		registry.RegisterWatchMachine(mgr.GetName(), machine)
@@ -127,29 +115,25 @@ func rawToTyped[T any](prev shared.RawWatchValue, varName string) shared.WatchVa
 	}
 }
 
-func convertCallHandleToRaw[T any](
-	getCallHandle wm.GetCallHandleFunc[T],
+func parseGetRawCallHandle[T any](
+	getNewUpdateFunc wm.GetNewUpdateFunc[T],
 	varName string,
 	tick time.Duration,
 ) wm.GetRawCallHandleFunc {
-	if getCallHandle == nil {
+	if getNewUpdateFunc == nil {
 		return nil
 	}
 	return func(callCtx wm.CallContext) (wm.RawCallHandle, error) {
-		typedHandle, err := getCallHandle(callCtx)
+		newUpdateFunc, err := getNewUpdateFunc(callCtx)
 		if err != nil {
 			return wm.RawCallHandle{}, err
 		}
 
-		effectiveTick := typedHandle.Tick
-		if effectiveTick == 0 {
-			effectiveTick = tick
-		}
-
 		return wm.RawCallHandle{
-			Tick: effectiveTick,
-			GetRawUpdateFunc: func(runCtx wm.RunContext) wm.RawUpdateFunc {
-				typedFn := typedHandle.GetUpdateFunc(runCtx)
+			VarName: varName,
+			Tick:    tick,
+			NewRawUpdateFunc: func(runCtx wm.RunContext) wm.RawUpdateFunc {
+				typedFn := newUpdateFunc(runCtx)
 				if typedFn == nil {
 					return nil
 				}
@@ -166,25 +150,25 @@ func convertCallHandleToRaw[T any](
 	}
 }
 
-func convertFlowHandleToRaw[T any](
-	getFlowHandle wm.GetFlowHandleFunc[T],
+func parseGetRawFlowHandle[T any](
+	getFlowChan wm.GetFlowChan[T],
 	varName string,
 ) wm.GetRawFlowHandleFunc {
-	if getFlowHandle == nil {
+	if getFlowChan == nil {
 		return nil
 	}
 	return func(flowCtx wm.FlowContext) (wm.RawFlowHandle, error) {
-		typedHandle, err := getFlowHandle(flowCtx)
+		typedChan, err := getFlowChan(flowCtx)
 		if err != nil {
 			return wm.RawFlowHandle{}, err
 		}
 
-		rawCh := make(chan wm.RawUpdateFunc, cap(typedHandle.FlowChan))
+		rawCh := make(chan wm.RawUpdateFunc, cap(typedChan))
 
 		// 브릿지 고루틴: typed chan → raw chan
 		go func() {
 			defer close(rawCh)
-			for typedFn := range typedHandle.FlowChan {
+			for typedFn := range typedChan {
 				fn := typedFn // capture
 				rawFn := func(prev shared.RawWatchValue) (shared.RawWatchValue, bool) {
 					prevTyped := rawToTyped[T](prev, varName)
@@ -199,6 +183,7 @@ func convertFlowHandleToRaw[T any](
 		}()
 
 		return wm.RawFlowHandle{
+			VarName:     varName,
 			RawFlowChan: rawCh,
 		}, nil
 	}
