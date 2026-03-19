@@ -3,7 +3,6 @@ package wm
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/HershyOrg/watch/shared"
@@ -63,10 +62,6 @@ type WatchMachine struct {
 	//PublishersChecker를 통해 자신을 Export한 Manager가 죽었는지 체크함.
 	PublishersChecker PublishersCheckerInterface
 
-	//appendIndex는 LoopHistory에 Append될 때마다 단조증가하는 인덱스.
-	//Marker와 비교하여 구독자가 최신값을 이미 읽었는지 판단함.
-	appendIndex atomic.Uint64
-
 	//marker는 구독자별 최종 읽은 인덱스를 기록한다.
 	marker *Marker
 }
@@ -123,7 +118,6 @@ func NewWatchMachine(cfg WatchMachineConfig) *WatchMachine {
 		marker:           NewMarker(),
 	}
 
-	// loop 생성 (appendIndex 참조 전달을 위해 wm 생성 후)
 	wm.loop = NewWatchLoop(
 		cfg.VarName,
 		cfg.WatchType,
@@ -134,7 +128,6 @@ func NewWatchMachine(cfg WatchMachineConfig) *WatchMachine {
 		&notifyChs,
 		cfg.RecoveryPolicy,
 		eventChan,
-		&wm.appendIndex,
 	)
 
 	// 이벤트 루프 시작
@@ -229,39 +222,24 @@ func (wm *WatchMachine) GetLoopHistoryRef() *LoopHistory {
 
 // GetAppendIndex는 현재 appendIndex를 반환함.
 func (wm *WatchMachine) GetAppendIndex() uint64 {
-	return wm.appendIndex.Load()
-}
-
-// IncrementAppendIndex는 appendIndex를 1 증가시킴. WatchLoop에서 Append 후 호출.
-func (wm *WatchMachine) IncrementAppendIndex() {
-	wm.appendIndex.Add(1)
+	return wm.loopHistory.AppendIndex()
 }
 
 // ReadLatestFor는 구독자에게 최신값을 반환한다.
 // 이미 읽었으면 (zero, true) — "이미 최신"
 // 안 읽었으면 마킹 후 (value, false) — "새 값"
 func (wm *WatchMachine) ReadLatestFor(subscriberName string) (shared.RawWatchValue, bool) {
-	wm.marker.mu.Lock()
-	defer wm.marker.mu.Unlock()
-
-	currentIndex := wm.appendIndex.Load()
-	lastRead := wm.marker.lastRead[subscriberName]
-
-	if lastRead >= currentIndex {
+	currentIndex := wm.loopHistory.AppendIndex()
+	alreadyRead := wm.marker.CheckAndMark(subscriberName, currentIndex)
+	if alreadyRead {
 		return shared.RawWatchValue{}, true
 	}
-
-	val := wm.loopHistory.LastValue()
-	wm.marker.lastRead[subscriberName] = currentIndex
-	return val, false
+	return wm.loopHistory.LastValue(), false
 }
 
 // Subscribe는 구독자를 등록한다. Marker 생성 + notifyCh 등록 + Subscribers 추가.
 func (wm *WatchMachine) Subscribe(sub Subscriber, notifyCh chan struct{}) {
-	wm.marker.mu.Lock()
-	wm.marker.lastRead[sub.GetName()] = 0
-	wm.marker.mu.Unlock()
-
+	wm.marker.Register(sub.GetName())
 	*wm.loop.notifyChs = append(*wm.loop.notifyChs, notifyCh)
 	wm.Subscribers = append(wm.Subscribers, sub)
 }
@@ -277,4 +255,25 @@ func NewMarker() *Marker {
 	return &Marker{
 		lastRead: make(map[string]uint64),
 	}
+}
+
+// Register는 구독자의 lastRead를 0으로 초기화한다.
+func (m *Marker) Register(subscriberName string) {
+	m.mu.Lock()
+	m.lastRead[subscriberName] = 0
+	m.mu.Unlock()
+}
+
+// CheckAndMark는 구독자가 이미 최신인지 확인한다.
+// 이미 읽었으면 true(alreadyRead), 안 읽었으면 마킹 후 false를 반환한다.
+func (m *Marker) CheckAndMark(subscriberName string, currentIndex uint64) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	lastRead := m.lastRead[subscriberName]
+	if lastRead >= currentIndex {
+		return true
+	}
+	m.lastRead[subscriberName] = currentIndex
+	return false
 }

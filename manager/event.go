@@ -31,6 +31,12 @@ func (k ControlEventKind) String() string {
 	}
 }
 
+type ManagerSemanticEvent interface {
+	Priority() shared.SignalPriority
+	CreatedAt() time.Time
+	String() string
+}
+
 // UserMessageReceived represents the fact that a user sent a message.
 // Replaces the old UserSentMsgSig.
 type UserMessageReceived struct {
@@ -60,7 +66,7 @@ func (e *UserMessageReceived) String() string {
 type ControlEvent struct {
 	ReceivedTime time.Time
 	Kind         ControlEventKind
-	NeedInit     bool   // Only used for RunRequested (restart scenarios)
+	NeedInit     bool // Only used for RunRequested (restart scenarios)
 	Reason       string
 }
 

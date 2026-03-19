@@ -2,6 +2,7 @@ package wm
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/HershyOrg/watch/shared"
@@ -19,12 +20,13 @@ type LoopHistoryConfig struct {
 // * 다만 그 자체로 (이론상) 과거 불변의 로그 with TimeStamp므로,
 // * State와 같은 층위의 신뢰도를 지닌다.
 type LoopHistory struct {
-	mu     sync.RWMutex
-	buf    []ReducedSnapshot
-	head   int // 가장 오래된 항목의 인덱스
-	count  int // 현재 유효 항목 수
-	cap    int // buf 크기 (MaxLen)
-	maxDur time.Duration
+	mu          sync.RWMutex
+	buf         []ReducedSnapshot
+	head        int // 가장 오래된 항목의 인덱스
+	count       int // 현재 유효 항목 수
+	cap         int // buf 크기 (MaxLen)
+	maxDur      time.Duration
+	appendIndex atomic.Uint64 // Append될 때마다 단조증가하는 인덱스
 }
 
 // NewLoopHistory는 LoopHistory를 생성함.
@@ -62,6 +64,8 @@ func (h *LoopHistory) Append(snapshot ReducedSnapshot) {
 
 	// MaxDur 초과 항목 제거
 	h.evictExpired()
+
+	h.appendIndex.Add(1)
 }
 
 // evictExpired는 head부터 MaxDur 초과 항목을 제거함. mu 잠금 상태에서 호출.
@@ -116,6 +120,11 @@ func (h *LoopHistory) Len() int {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return h.count
+}
+
+// AppendIndex는 현재까지의 Append 횟수(단조증가 인덱스)를 반환함.
+func (h *LoopHistory) AppendIndex() uint64 {
+	return h.appendIndex.Load()
 }
 
 // ConsecutiveErrors는 LoopHistory 끝에서부터 연속된 에러 수를 반환함.

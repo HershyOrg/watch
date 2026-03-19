@@ -90,7 +90,20 @@ func (r *Reducer) tryProcessNextEvent(runner *MgrfuncRnner) bool {
 	// Priority 0: ControlEvent (highest)
 	select {
 	case event := <-r.signals.ControlEventChan:
-		r.reduceAndExecute(event, runner)
+		prevSnapshot := r.state.Snapshot()
+
+		// 1. Reduce: update ControlState + determine Effect
+		effect, triggeredSig := r.reduceSemantic(event)
+
+		// 2. Log
+		action := ReduceAction{
+			PrevState:       prevSnapshot,
+			Event:           event,
+			Effect:          effect,
+			NextState:       r.state.Snapshot(),
+			TriggeredSignal: triggeredSig,
+		}
+		r.logAndExecute(action, runner)
 		return true
 	default:
 	}
@@ -99,7 +112,20 @@ func (r *Reducer) tryProcessNextEvent(runner *MgrfuncRnner) bool {
 	if r.canProcessUserEvent(cs) {
 		select {
 		case event := <-r.signals.UserEventChan:
-			r.reduceAndExecute(event, runner)
+			prevSnapshot := r.state.Snapshot()
+
+			// 1. Reduce: update ControlState + determine Effect
+			effect, triggeredSig := r.reduceSemantic(event)
+
+			// 2. Log
+			action := ReduceAction{
+				PrevState:       prevSnapshot,
+				Event:           event,
+				Effect:          effect,
+				NextState:       r.state.Snapshot(),
+				TriggeredSignal: triggeredSig,
+			}
+			r.logAndExecute(action, runner)
 			return true
 		default:
 		}
@@ -122,7 +148,17 @@ func (r *Reducer) tryProcessNextEvent(runner *MgrfuncRnner) bool {
 			}
 
 			triggeredSig := &shared.TriggeredSignal{VarSigNames: varNames}
-			r.reduceAndExecuteVar(triggeredSig, runner)
+			prevSnapshot := r.state.Snapshot()
+			effect := &RunEffect{TriggeredSignal: triggeredSig}
+
+			action := ReduceAction{
+				PrevState:       prevSnapshot,
+				Event:           triggeredSig,
+				Effect:          effect,
+				NextState:       r.state.Snapshot(),
+				TriggeredSignal: triggeredSig,
+			}
+			r.logAndExecute(action, runner)
 			return true
 		}
 		// 모든 WM이 (_, true) 반환 → 이미 최신 → 실행 안 함
@@ -131,60 +167,26 @@ func (r *Reducer) tryProcessNextEvent(runner *MgrfuncRnner) bool {
 	return false
 }
 
-// reduceAndExecute performs the complete Reduce-Execute cycle for a SemanticEvent.
-func (r *Reducer) reduceAndExecute(event interface{}, runner *MgrfuncRnner) {
-	prevSnapshot := r.state.Snapshot()
+// logAndExecute performs the complete Reduce-Execute cycle for a SemanticEvent.
+func (r *Reducer) logAndExecute(action ReduceAction, runner *MgrfuncRnner) {
 
-	// 1. Reduce: update ControlState + determine Effect
-	effect, triggeredSig := r.reduce(event)
-
-	// 2. Log
-	action := ReduceAction{
-		PrevState:       prevSnapshot,
-		Event:           event,
-		Effect:          effect,
-		NextState:       r.state.Snapshot(),
-		TriggeredSignal: triggeredSig,
-	}
 	if r.logger != nil {
 		r.logger.LogReduce(action)
 	}
 
 	// 3. No effect → done
-	if effect == nil {
+	if action.Effect == nil {
 		return
 	}
 
 	// 4. Pass effect to MgrFuncRunner
-	drivenEvent := runner.Execute(effect)
+	drivenEvent := runner.Execute(action.Effect)
 	if drivenEvent == nil {
 		return
 	}
 
 	// 5. Process EffectDrivenEvent recursively
 	r.reduceEffectDrivenEvent(drivenEvent, runner)
-}
-
-// reduceAndExecuteVar handles Var trigger: log and execute RunEffect.
-func (r *Reducer) reduceAndExecuteVar(triggeredSig *shared.TriggeredSignal, runner *MgrfuncRnner) {
-	prevSnapshot := r.state.Snapshot()
-	effect := &RunEffect{TriggeredSignal: triggeredSig}
-
-	action := ReduceAction{
-		PrevState:       prevSnapshot,
-		Event:           triggeredSig,
-		Effect:          effect,
-		NextState:       r.state.Snapshot(),
-		TriggeredSignal: triggeredSig,
-	}
-	if r.logger != nil {
-		r.logger.LogReduce(action)
-	}
-
-	drivenEvent := runner.Execute(effect)
-	if drivenEvent != nil {
-		r.reduceEffectDrivenEvent(drivenEvent, runner)
-	}
 }
 
 // reduceEffectDrivenEvent processes an EffectDrivenEvent recursively.
@@ -220,15 +222,16 @@ func (r *Reducer) reduceEffectDrivenEvent(event EffectDrivenEvent, runner *Mgrfu
 	r.reduceEffectDrivenEvent(drivenEvent, runner)
 }
 
-// reduce processes a SemanticEvent: updates ControlState and returns the Effect to execute.
-func (r *Reducer) reduce(event interface{}) (Effect, *shared.TriggeredSignal) {
+// reduceSemantic processes a SemanticEvent: updates ControlState and returns the Effect to execute.
+func (r *Reducer) reduceSemantic(event ManagerSemanticEvent) (Effect, *shared.TriggeredSignal) {
 	switch e := event.(type) {
-	case *UserMessageReceived:
-		return r.reduceUserEvent(e)
 	case *ControlEvent:
 		return r.reduceControlEvent(e)
+	case *UserMessageReceived:
+		return r.reduceUserEvent(e)
+	default:
+		return nil, nil
 	}
-	return nil, nil
 }
 
 // reduceUserEvent handles UserMessageReceived.
@@ -312,9 +315,9 @@ func (r *Reducer) reduceDriven(event EffectDrivenEvent) Effect {
 	return nil
 }
 
-// Reduce is the exported version of reduce for testing.
-func (r *Reducer) Reduce(event interface{}) (Effect, *shared.TriggeredSignal) {
-	return r.reduce(event)
+// ReduceSemantic is the exported version of reduce for testing.
+func (r *Reducer) ReduceSemantic(event ManagerSemanticEvent) (Effect, *shared.TriggeredSignal) {
+	return r.reduceSemantic(event)
 }
 
 // ReduceDriven is the exported version of reduceDriven for testing.

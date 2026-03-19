@@ -49,13 +49,13 @@ func NewManager(
 	)
 
 	mgr := &Manager{
-		config:    &config,
-		name:      name,
-		logger:    logger,
-		state:     state,
-		signals:   signals,
+		config:     &config,
+		name:       name,
+		logger:     logger,
+		state:      state,
+		signals:    signals,
 		funcRunner: runner,
-		memoCache: sync.Map{},
+		memoCache:  sync.Map{},
 	}
 
 	// Reducer는 Manager 참조 필요 (MachineRegistry 접근용)
