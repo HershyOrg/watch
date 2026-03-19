@@ -125,8 +125,7 @@ func (wl *WatchLoop) recordGetHandleErr(err error) {
 		GetHandleErrOrNil: err,
 		RawUpdateFunc:     nil,
 		ReturnedValue: shared.RawWatchValue{
-			Error:   err,
-			VarName: wl.varName,
+			Error: err,
 		},
 	}
 	wl.loopHistory.Append(errSnapshot)
@@ -404,8 +403,7 @@ func (wl *WatchLoop) safeGetUpdateFunc(handle RawCallHandle, rc RunContext) RawU
 		// 패닉을 에러를 리턴하는 UpdateFunc로 대체
 		return func(prev shared.RawWatchValue) (shared.RawWatchValue, bool) {
 			return shared.RawWatchValue{
-				Error:   panicErr,
-				VarName: wl.varName,
+				Error: panicErr,
 			}, false
 		}
 	}
@@ -426,8 +424,7 @@ func (wl *WatchLoop) safeCallUpdateFunc(fn RawUpdateFunc, prev shared.RawWatchVa
 	defer func() {
 		if r := recover(); r != nil {
 			next = shared.RawWatchValue{
-				Error:   fmt.Errorf("panic in UpdateFunc: %v", r),
-				VarName: wl.varName,
+				Error: fmt.Errorf("panic in UpdateFunc: %v", r),
 			}
 			skip = false
 		}

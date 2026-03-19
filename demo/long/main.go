@@ -12,7 +12,7 @@ import (
 
 	"github.com/HershyOrg/watch"
 	"github.com/HershyOrg/watch/shared"
-	"github.com/HershyOrg/watch/util"
+
 	"github.com/HershyOrg/watch/wm"
 )
 
@@ -172,16 +172,17 @@ func mainReducer(
 ) error {
 	// WatchFlow: BTC price (real-time from WebSocket)
 	btcHV := watch.WatchFlow[float64](0.0,
-		flowValueStreamToFlowHandle(stream.GetBTCPriceStream(), "btc_price"),
+		flowValueStreamToFlowHandle(stream.GetBTCPriceStream()),
 		"btc_price", ctx)
 	// WatchFlow: ETH price (real-time from WebSocket)
 	ethHV := watch.WatchFlow[float64](0.0,
-		flowValueStreamToFlowHandle(stream.GetETHPriceStream(), "eth_price"),
+		flowValueStreamToFlowHandle(stream.GetETHPriceStream()),
 		"eth_price", ctx)
+
 	// WatchTick: Stats ticker (1 minute interval)
-	statsTick := util.WatchTick("stats_ticker", StatsInterval, ctx)
+	statsTick := watch.WatchTick("stats_ticker", StatsInterval, ctx)
 	// WatchTick: Rebalance ticker (1 hour interval)
-	rebalanceTick := util.WatchTick("rebalance_ticker", RebalanceInterval, ctx)
+	rebalanceTick := watch.WatchTick("rebalance_ticker", RebalanceInterval, ctx)
 
 	if btcHV.IsUpdatedValide() {
 		simulator.UpdatePrice("BTC", btcHV.Value)
@@ -192,12 +193,12 @@ func mainReducer(
 
 	if statsTick.IsTriggered(ctx) {
 		statsCollector.PrintStats(stream, simulator)
-		watch.PrintWithLog(fmt.Sprintf("   (Stats tick #%d at %s)", statsTick.TickCount, statsTick.Time.Format("15:04:05")), ctx)
+		watch.PrintWithLog(fmt.Sprintf("   (Stats tick #%d at %s)", statsTick.Value.TickCount, statsTick.Value.Time.Format("15:04:05")), ctx)
 	}
 
 	if rebalanceTick.IsTriggered(ctx) {
 		watch.PrintWithLog(fmt.Sprintf("\n⏰ Hourly rebalance triggered (tick #%d at %s)...",
-			rebalanceTick.TickCount, rebalanceTick.Time.Format("15:04:05")), ctx)
+			rebalanceTick.Value.TickCount, rebalanceTick.Value.Time.Format("15:04:05")), ctx)
 		trades := simulator.Rebalance()
 
 		if len(trades) > 0 {
@@ -283,8 +284,7 @@ func handleUserInput(w *watch.Watcher) {
 // WatchFlow expects func(flowCtx) (chan UpdateFunc[T], error).
 func flowValueStreamToFlowHandle(
 	getStream func(ctx context.Context) (<-chan shared.FlowValue[float64], error),
-	varName string,
-) wm.GetFlowChan[float64] {
+) wm.SetupUpdateFuncChan[float64] {
 	return func(flowCtx wm.FlowContext) (chan wm.UpdateFunc[float64], error) {
 		sourceCh, err := getStream(flowCtx)
 		if err != nil {
@@ -300,12 +300,12 @@ func flowValueStreamToFlowHandle(
 				val := fv // capture
 				fn := func(prev shared.WatchValue[float64]) (shared.WatchValue[float64], bool) {
 					if val.E != nil {
-						return shared.WatchValue[float64]{Error: val.E, VarName: varName}, false
+						return shared.WatchValue[float64]{Error: val.E}, false
 					}
 					if val.SkipSignal {
 						return prev, true
 					}
-					return shared.WatchValue[float64]{Value: val.V, VarName: varName}, false
+					return shared.WatchValue[float64]{Value: val.V}, false
 				}
 				updateCh <- fn
 			}

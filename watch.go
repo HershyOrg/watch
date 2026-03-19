@@ -27,13 +27,20 @@ func WatchCall[T any](
 	runCtx shared.ManageContext,
 ) shared.WatchValue[T] {
 	mgr := getManagerFromContext(runCtx)
+
 	if mgr == nil {
-		return shared.WatchValue[T]{Value: init, NotUpdated: true, VarName: varName}
+		return shared.RawToTyped[T](shared.RawWatchValueWithName{
+			RawWatchValue: shared.RawWatchValue{
+				Value: init, NotUpdated: true,
+			}, VarName: varName})
 	}
 
 	registry := mgr.GetMachineRegistry()
 	if registry == nil {
-		return shared.WatchValue[T]{Value: init, NotUpdated: true, VarName: varName}
+		return shared.RawToTyped[T](shared.RawWatchValueWithName{
+			RawWatchValue: shared.RawWatchValue{
+				Value: init, NotUpdated: true,
+			}, VarName: varName})
 	}
 
 	// WM이 없으면 생성
@@ -57,22 +64,28 @@ func WatchCall[T any](
 // WatchFlow monitors a value via channel-based flow using WatchMachine.
 func WatchFlow[T any](
 	init T,
-	getFlowHandleFunc wm.GetFlowChan[T],
+	setupUpdateFuncChan wm.SetupUpdateFuncChan[T],
 	varName string,
 	runCtx shared.ManageContext,
 ) shared.WatchValue[T] {
 	mgr := getManagerFromContext(runCtx)
 	if mgr == nil {
-		return shared.WatchValue[T]{Value: init, NotUpdated: true, VarName: varName}
+		return shared.RawToTyped[T](shared.RawWatchValueWithName{
+			RawWatchValue: shared.RawWatchValue{
+				Value: init, NotUpdated: true,
+			}, VarName: varName})
 	}
 
 	registry := mgr.GetMachineRegistry()
 	if registry == nil {
-		return shared.WatchValue[T]{Value: init, NotUpdated: true, VarName: varName}
+		return shared.RawToTyped[T](shared.RawWatchValueWithName{
+			RawWatchValue: shared.RawWatchValue{
+				Value: init, NotUpdated: true,
+			}, VarName: varName})
 	}
 
 	if _, exists := registry.GetWatchMachine(varName); !exists {
-		getRawFlowHandle := parseGetRawFlowHandle(getFlowHandleFunc, varName)
+		getRawFlowHandle := parseGetRawFlowHandle(setupUpdateFuncChan, varName)
 		machine := wm.NewWatchMachine(wm.WatchMachineConfig{
 			VarName:               varName,
 			WatchType:             wm.WatchFlowType,
@@ -90,29 +103,18 @@ func WatchFlow[T any](
 // readVarStateOrInit reads from VarState or returns init if not yet available.
 func readVarStateOrInit[T any](mgr *manager.Manager, varName string, init T) shared.WatchValue[T] {
 	rawVal, ok := mgr.GetManagerState().VarState.Get(varName)
+
 	if !ok || rawVal.Value == nil {
-		return shared.WatchValue[T]{Value: init, NotUpdated: true, VarName: varName}
+		return shared.RawToTyped[T](shared.RawWatchValueWithName{
+			RawWatchValue: shared.RawWatchValue{
+				Value: init, NotUpdated: true,
+			}, VarName: varName})
 	}
 
-	val := rawVal.Value.(T) // 미스매치 시 panic
-	return shared.WatchValue[T]{Value: val, Error: rawVal.Error, VarName: varName}
-}
-
-// --- 변환 헬퍼 ---
-
-// rawToTyped converts RawWatchValue to WatchValue[T].
-// prev.Value가 nil이면 T의 zero value 사용 (초기 호출).
-// 타입 미스매치 시 panic.
-func rawToTyped[T any](prev shared.RawWatchValue, varName string) shared.WatchValue[T] {
-	if prev.Value == nil {
-		var zero T
-		return shared.WatchValue[T]{Value: zero, Error: prev.Error, VarName: varName, NotUpdated: true}
-	}
-	return shared.WatchValue[T]{
-		Value:   prev.Value.(T), // 미스매치 시 panic
-		Error:   prev.Error,
-		VarName: varName,
-	}
+	return shared.RawToTyped[T](shared.RawWatchValueWithName{
+		RawWatchValue: rawVal,
+		VarName:       varName,
+	})
 }
 
 func parseGetRawCallHandle[T any](
@@ -138,7 +140,10 @@ func parseGetRawCallHandle[T any](
 					return nil
 				}
 				return func(prev shared.RawWatchValue) (shared.RawWatchValue, bool) {
-					prevTyped := rawToTyped[T](prev, varName)
+					prevTyped := shared.RawToTyped[T](shared.RawWatchValueWithName{
+						RawWatchValue: prev,
+						VarName:       varName,
+					})
 					nextTyped, skip := typedFn(prevTyped)
 					if skip {
 						return prev, true
@@ -151,14 +156,14 @@ func parseGetRawCallHandle[T any](
 }
 
 func parseGetRawFlowHandle[T any](
-	getFlowChan wm.GetFlowChan[T],
+	setupUpdateFuncChan wm.SetupUpdateFuncChan[T],
 	varName string,
 ) wm.GetRawFlowHandleFunc {
-	if getFlowChan == nil {
+	if setupUpdateFuncChan == nil {
 		return nil
 	}
 	return func(flowCtx wm.FlowContext) (wm.RawFlowHandle, error) {
-		typedChan, err := getFlowChan(flowCtx)
+		typedChan, err := setupUpdateFuncChan(flowCtx)
 		if err != nil {
 			return wm.RawFlowHandle{}, err
 		}
@@ -171,7 +176,12 @@ func parseGetRawFlowHandle[T any](
 			for typedFn := range typedChan {
 				fn := typedFn // capture
 				rawFn := func(prev shared.RawWatchValue) (shared.RawWatchValue, bool) {
-					prevTyped := rawToTyped[T](prev, varName)
+					prevTyped := shared.RawToTyped[T](
+						shared.RawWatchValueWithName{
+							RawWatchValue: prev,
+							VarName:       varName,
+						},
+					)
 					nextTyped, skip := fn(prevTyped)
 					if skip {
 						return prev, true

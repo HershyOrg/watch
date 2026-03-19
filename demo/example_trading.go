@@ -83,7 +83,7 @@ func tradingFunc(msg *watch.Message, ctx watch.ManageContext) error {
 				price, err := client.GetBitcoinPrice()
 				if err != nil {
 					return func(prev shared.WatchValue[float64]) (shared.WatchValue[float64], bool) {
-						return shared.WatchValue[float64]{Error: err, VarName: "btcPrice"}, false
+						return shared.WatchValue[float64]{Error: err}, false
 					}
 				}
 				return func(prev shared.WatchValue[float64]) (shared.WatchValue[float64], bool) {
@@ -93,7 +93,7 @@ func tradingFunc(msg *watch.Message, ctx watch.ManageContext) error {
 								prev.Value, price, price-prev.Value)
 						}
 					}
-					return shared.WatchValue[float64]{Value: price, VarName: "btcPrice"}, false
+					return shared.WatchValue[float64]{Value: price}, false
 				}
 			}, nil
 		},

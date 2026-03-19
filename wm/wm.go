@@ -95,8 +95,9 @@ func NewWatchMachine(cfg WatchMachineConfig) *WatchMachine {
 	}
 
 	history := NewLoopHistory(LoopHistoryConfig{
-		MaxLen: 30000,
-		MaxDur: 24 * time.Hour,
+		varName: cfg.VarName,
+		MaxLen:  30000,
+		MaxDur:  24 * time.Hour,
 	})
 	notifyChs := make([]chan struct{}, 0)
 	eventChan := make(chan LoopEvent, 100)

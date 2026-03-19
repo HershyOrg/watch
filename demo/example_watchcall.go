@@ -33,7 +33,7 @@ func main1() {
 					externalCounter++
 					return func(prev shared.WatchValue[int]) (shared.WatchValue[int], bool) {
 						fmt.Printf("  Polling: prev=%v, current=%v\n", prev.Value, currentValue)
-						return shared.WatchValue[int]{Value: currentValue, VarName: "externalCounter"}, false
+						return shared.WatchValue[int]{Value: currentValue}, false
 					}
 				}, nil
 			},

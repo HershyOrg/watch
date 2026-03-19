@@ -10,8 +10,9 @@ import (
 
 // LoopHistoryConfig는 LoopHistory 순환큐의 설정임.
 type LoopHistoryConfig struct {
-	MaxLen int           // 최대 보관 개수
-	MaxDur time.Duration // 최대 보관 기간
+	varName string
+	MaxLen  int           // 최대 보관 개수
+	MaxDur  time.Duration // 최대 보관 기간
 }
 
 // LoopHistory는 병렬안전 순환큐로 구현된 관측 기록임.
@@ -20,6 +21,7 @@ type LoopHistoryConfig struct {
 // * 다만 그 자체로 (이론상) 과거 불변의 로그 with TimeStamp므로,
 // * State와 같은 층위의 신뢰도를 지닌다.
 type LoopHistory struct {
+	varName     string
 	mu          sync.RWMutex
 	buf         []ReducedSnapshot
 	head        int // 가장 오래된 항목의 인덱스
@@ -38,9 +40,10 @@ func NewLoopHistory(cfg LoopHistoryConfig) *LoopHistory {
 		cfg.MaxDur = 24 * time.Hour
 	}
 	return &LoopHistory{
-		buf:    make([]ReducedSnapshot, cfg.MaxLen),
-		cap:    cfg.MaxLen,
-		maxDur: cfg.MaxDur,
+		varName: cfg.varName,
+		buf:     make([]ReducedSnapshot, cfg.MaxLen),
+		cap:     cfg.MaxLen,
+		maxDur:  cfg.MaxDur,
 	}
 }
 

@@ -17,7 +17,7 @@ func WatchTick(
 ) shared.WatchValue[shared.TickValue] {
 	var tickCount int64
 
-	init := shared.TickValue{Time: time.Now(), NotUpdated: true, VarName: varName}
+	init := shared.TickValue{Time: time.Now(), NotUpdated: true}
 
 	return WatchCall[shared.TickValue](
 		init,
@@ -31,9 +31,7 @@ func WatchTick(
 							Value: shared.TickValue{
 								Time:      time.Now(),
 								TickCount: int(count),
-								VarName:   varName,
 							},
-							VarName: varName,
 						}, false
 					}
 				},

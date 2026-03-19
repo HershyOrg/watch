@@ -3,6 +3,7 @@ package shared
 
 import (
 	"context"
+	"fmt"
 	"time"
 )
 
@@ -296,13 +297,53 @@ type RawFlowValue struct {
 	SkipSignal bool  // Skip signal flag
 }
 
+// --- 변환 헬퍼 ---
+
+// RawToTyped converts RawWatchValue to WatchValue[T].
+// prev.Value가 nil이면 T의 zero value 사용 (초기 호출).
+// 타입 미스매치 시 panic.
+func RawToTyped[T any](rv RawWatchValueWithName) WatchValue[T] {
+	if rv.RawWatchValue.Value == nil {
+		var zero T
+		return WatchValue[T]{
+			Value:      zero,
+			Error:      rv.RawWatchValue.Error,
+			NotUpdated: true,
+			varName:    rv.VarName,
+		}
+	}
+
+	v, ok := rv.RawWatchValue.Value.(T)
+	if !ok {
+
+		panic(fmt.Sprintf(
+			"RawToTyped: type mismatch for var '%s': expected %T, got %T",
+			rv.VarName,
+			*new(T),
+			rv.RawWatchValue.Value,
+		))
+	}
+
+	return WatchValue[T]{
+		Value:      v,
+		Error:      rv.RawWatchValue.Error,
+		NotUpdated: rv.RawWatchValue.NotUpdated,
+		varName:    rv.VarName,
+	}
+}
+
 // WatchValue represents a value or error from Watch variables (generic version).
 // This allows users to work with type-safe values while internally using any.
 type WatchValue[T any] struct {
 	Value      T      // The actual value (type-safe)
 	Error      error  // Error that occurred during computation (nil if no error)
-	VarName    string // Name of the watched variable (empty if not from Watch)
+	varName    string // Name of the watched variable (empty if not from Watch)
 	NotUpdated bool   // true if this is an initial value, false if actually updated
+}
+
+// VarName을 통해 사용자는 WatchValue접근 가능.
+func (wv WatchValue[T]) VarName() string {
+	return wv.varName
 }
 
 // IsError returns true if this HershValue contains an error.
@@ -346,16 +387,17 @@ func (wv WatchValue[T]) GetOr(defaultVal T) T {
 // Requires a valid ManageContext to check the TriggeredSignal.
 // Returns false if VarName is empty or if no trigger information is available.
 func (wv WatchValue[T]) IsTriggered(ctx ManageContext) bool {
-	if wv.VarName == "" {
+	if wv.VarName() == "" {
 		return false // Not a watched variable
 	}
 
 	trigger := ctx.GetTriggeredSignal()
+
 	if trigger == nil {
 		return false
 	}
 
-	return trigger.HasVarTrigger(wv.VarName)
+	return trigger.HasVarTrigger(wv.VarName())
 }
 
 // ToRaw converts HershValue[T] to RawHershValue for internal storage.
@@ -363,7 +405,6 @@ func (wv WatchValue[T]) ToRaw() RawWatchValue {
 	return RawWatchValue{
 		Value:      any(wv.Value),
 		Error:      wv.Error,
-		VarName:    wv.VarName,
 		NotUpdated: wv.NotUpdated,
 	}
 }
@@ -382,10 +423,15 @@ const (
 // RawWatchValue is the internal non-generic version used by VarState for storage.
 type RawWatchValue struct {
 	ErrorKind  WatchLoopErrKind
-	Value      any    // The actual value stored as any
-	Error      error  // Error that occurred during computation
-	VarName    string // Name of the watched variable
-	NotUpdated bool   // true if this is an initial value, false if actually updated
+	Value      any   // The actual value stored as any
+	Error      error // Error that occurred during computation
+	NotUpdated bool  // true if this is an initial value, false if actually updated
+}
+
+// RawWatchValueWithName는 이름이 있는 RawWatchValue임
+type RawWatchValueWithName struct {
+	RawWatchValue RawWatchValue
+	VarName       string
 }
 
 // TickValue represents a time-based tick event with count tracking.
@@ -393,7 +439,6 @@ type RawWatchValue struct {
 type TickValue struct {
 	Time       time.Time // Current tick timestamp
 	TickCount  int       // Total number of ticks occurred (starts from 1)
-	VarName    string    // Name of the watched variable (empty if not from WatchTick)
 	NotUpdated bool      // true if this is an initial value, false if actually ticked
 }
 
@@ -405,22 +450,6 @@ func (tv TickValue) IsUpdated() bool {
 // IsInitial returns true if this is an initial tick value (not yet updated).
 func (tv TickValue) IsInitial() bool {
 	return tv.NotUpdated
-}
-
-// IsTriggered returns true if this ticker was triggered in the current execution.
-// Requires a valid ManageContext to check the TriggeredSignal.
-// Returns false if VarName is empty or if no trigger information is available.
-func (tv TickValue) IsTriggered(ctx ManageContext) bool {
-	if tv.VarName == "" {
-		return false // Not a watched variable
-	}
-
-	trigger := ctx.GetTriggeredSignal()
-	if trigger == nil {
-		return false
-	}
-
-	return trigger.HasVarTrigger(tv.VarName)
 }
 
 // DefaultWatcherConfig returns default configuration.
