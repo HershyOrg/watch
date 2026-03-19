@@ -25,10 +25,6 @@ type (
 	VarNotInitializedError = shared.VarNotInitializedError
 )
 
-// VarUpdateFunc is a function that updates a variable's state.
-// DEPRECATED: This type is no longer used. Use manager.VarUpdateFunc instead.
-type VarUpdateFunc func(prev any) (next any, changed bool, err error)
-
 // Re-export ControlState constants
 const (
 	ControlIdle           = shared.ControlIdle

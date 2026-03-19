@@ -237,7 +237,6 @@ type WatcherConfig struct {
 
 	// Resource limit settings for long-running stability
 	MaxLogEntries      int // Maximum log entries before circular buffer truncation (default: 50,000)
-	MaxWatches         int // Maximum number of concurrent watches (default: 1,000)
 	MaxMemoEntries     int // Maximum number of memo cache entries (default: 1,000)
 	SignalChanCapacity int // Signal channel buffer capacity (default: 50,000)
 }
@@ -459,7 +458,6 @@ func DefaultWatcherConfig() WatcherConfig {
 		DefaultTimeout:     1 * time.Minute,
 		RecoveryPolicy:     DefaultRecoveryPolicy(),
 		MaxLogEntries:      50_000,
-		MaxWatches:         1_000,
 		MaxMemoEntries:     1_000,
 		SignalChanCapacity: 50_000,
 	}

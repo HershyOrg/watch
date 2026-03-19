@@ -315,8 +315,8 @@ func (r *Reducer) reduceDriven(event EffectDrivenEvent) Effect {
 	return nil
 }
 
-// Reduce is the exported version of reduce for testing.
-func (r *Reducer) Reduce(event ManagerSemanticEvent) (Effect, *shared.TriggeredSignal) {
+// ReduceSemantic is the exported version of reduce for testing.
+func (r *Reducer) ReduceSemantic(event ManagerSemanticEvent) (Effect, *shared.TriggeredSignal) {
 	return r.reduceSemantic(event)
 }
 

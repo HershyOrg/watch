@@ -10,7 +10,6 @@ import (
 
 // WatchMachine은 Watch와 관련한 기능을 한데 모은 구조체임.
 // Manager는 WatchMachine을 Subscribe함으로써 새 변수 값을 감지-추적 가능함.
-// 기존의 DELETED_Watch함수, DELETED_VarSig 및 watchRegistry나 각종 Handle을 대체함.
 type WatchMachine struct {
 	//varName을 통해 WatchMachine을 식별함
 	VarName string
