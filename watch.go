@@ -21,7 +21,7 @@ func getManagerFromContext(ctx shared.ManageContext) *manager.Manager {
 // VarState에 값이 없으면 init 반환.
 func WatchCall[T any](
 	init T,
-	getNewUpdateFunc wm.GetNewUpdateFunc[T],
+	setupGetUpdateFunc wm.SetupGetUpdateFunc[T],
 	varName string,
 	tick time.Duration,
 	runCtx shared.ManageContext,
@@ -38,7 +38,7 @@ func WatchCall[T any](
 
 	// WM이 없으면 생성
 	if _, exists := registry.GetWatchMachine(varName); !exists {
-		getRawCallHandle := parseGetRawCallHandle(getNewUpdateFunc, varName, tick)
+		getRawCallHandle := parseGetRawCallHandle(setupGetUpdateFunc, varName, tick)
 		machine := wm.NewWatchMachine(wm.WatchMachineConfig{
 			VarName:               varName,
 			WatchType:             wm.WatchCallType,
@@ -116,15 +116,15 @@ func rawToTyped[T any](prev shared.RawWatchValue, varName string) shared.WatchVa
 }
 
 func parseGetRawCallHandle[T any](
-	getNewUpdateFunc wm.GetNewUpdateFunc[T],
+	setupGetUpdateFunc wm.SetupGetUpdateFunc[T],
 	varName string,
 	tick time.Duration,
 ) wm.GetRawCallHandleFunc {
-	if getNewUpdateFunc == nil {
+	if setupGetUpdateFunc == nil {
 		return nil
 	}
 	return func(callCtx wm.CallContext) (wm.RawCallHandle, error) {
-		newUpdateFunc, err := getNewUpdateFunc(callCtx)
+		getUpdateFunc, err := setupGetUpdateFunc(callCtx)
 		if err != nil {
 			return wm.RawCallHandle{}, err
 		}
@@ -133,7 +133,7 @@ func parseGetRawCallHandle[T any](
 			VarName: varName,
 			Tick:    tick,
 			NewRawUpdateFunc: func(runCtx wm.RunContext) wm.RawUpdateFunc {
-				typedFn := newUpdateFunc(runCtx)
+				typedFn := getUpdateFunc(runCtx)
 				if typedFn == nil {
 					return nil
 				}
