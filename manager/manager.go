@@ -75,6 +75,7 @@ func NewManager(
 
 // Start starts the Reducer loop.
 // Only Reducer runs in a goroutine - it calls MgrFuncRunner synchronously.
+// ! 수정 요망
 func (m *Manager) Start(rootCtx context.Context) {
 	go m.reducer.Run(rootCtx, m.funcRunner)
 }
@@ -89,27 +90,6 @@ func (m *Manager) GetManagerState() *ManagerState {
 // GetState는 wm.Subscriber 인터페이스를 충족한다.
 func (m *Manager) GetState() (shared.ControlState, shared.RunnerState) {
 	return m.state.GetControlState(), m.funcRunner.GetRunnerState()
-}
-
-// ReadVarHistory는 wm.Subscriber 인터페이스를 충족한다.
-func (m *Manager) ReadVarHistory(varName string) ([]shared.RawWatchValue, error) {
-	if m.machineRegistry == nil {
-		return nil, fmt.Errorf("no machine registry")
-	}
-	machine, ok := m.machineRegistry.GetWatchMachine(varName)
-	if !ok {
-		return nil, fmt.Errorf("wm not found: %s", varName)
-	}
-	val, alreadyRead := machine.ReadLatestFor(m.name)
-	if alreadyRead {
-		return nil, nil
-	}
-	return []shared.RawWatchValue{val}, nil
-}
-
-// GetNewSigAppendChan은 wm.Subscriber 인터페이스를 충족한다.
-func (m *Manager) GetNewSigAppendChan() <-chan struct{} {
-	return m.signals.NewSigAppended
 }
 
 // GetName은 wm.Subscriber 인터페이스를 충족한다.
@@ -128,11 +108,13 @@ func (m *Manager) GetMachineRegistry() wm.MachineRegistry {
 }
 
 // GetSignals returns the SignalChannels.
+// ! 대체 요망
 func (m *Manager) GetSignals() *SignalChannels {
 	return m.signals
 }
 
 // GetRunner returns the MgrFuncRunner.
+// ! 대체 요망
 func (m *Manager) GetRunner() *MgrfuncRnner {
 	return m.funcRunner
 }
@@ -174,11 +156,4 @@ func (m *Manager) SetMemo(key string, value any) error {
 // GetMemo retrieves a value from the memo cache.
 func (m *Manager) GetMemo(key string) (any, bool) {
 	return m.memoCache.Load(key)
-}
-
-// Reinitialize clears all Manager state for restart.
-// NewSigAppended는 drain하지 않는다 (신호 보존).
-func (m *Manager) Reinitialize() {
-	m.state.VarState.Clear()
-	m.memoCache = sync.Map{}
 }

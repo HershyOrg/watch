@@ -6,14 +6,13 @@ import "github.com/HershyOrg/watch/shared"
 // Manager는 WatchMachine을 "구독"함.
 // Subscriber(Manager)는 WatchMachine에게서 수집한 valueLog를 얻어옴.
 type Subscriber interface {
-	// ReadVarHistory는 Subscriber가 WatchMachine에서 VarHistory를 꺼내오는 것임.
-	ReadVarHistory(varName string) ([]shared.RawWatchValue, error)
 	// GetState는 Subscriber의 현재 상태를 반환함.
 	GetState() (controlState shared.ControlState, runnerState shared.RunnerState)
-	// GetNewSigAppendChan은 WM이 새 값 추가 시 알림을 보낼 채널을 반환함.
-	GetNewSigAppendChan() <-chan struct{}
+
 	// GetName은 구독자 식별용 이름을 반환함.
 	GetName() string
+	//readLatestFromAllWMs 를 통해서 구독자는 Wm들의 최신값 읽음.
+	readLatestFromAllWMs() map[string]shared.RawWatchValue
 }
 
 // Publisher는 WatchMachine이 Manager를 "발행자"로 바라봤을 때의 interface임.

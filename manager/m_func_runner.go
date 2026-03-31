@@ -109,8 +109,8 @@ func (t *MgrfuncRnner) IsCleanupCompleted() bool {
 	return t.cleanupCompleted
 }
 
-// Reinitialize resets MgrFuncRunner state for Manager restart.
-func (t *MgrfuncRnner) Reinitialize(mgr *Manager) {
+// reinitialize resets MgrFuncRunner state for Manager restart.
+func (t *MgrfuncRnner) reinitialize(mgr *Manager) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -129,7 +129,9 @@ func (t *MgrfuncRnner) Reinitialize(mgr *Manager) {
 	t.manageCtx.UpdateContext(t.rootCtx)
 
 	// 5. Call Manager.Reinitialize() to clear Manager state
-	mgr.Reinitialize()
+	// NewSigAppended는 drain하지 않는다 (신호 보존).
+	mgr.state.VarState.Clear()
+	mgr.memoCache = sync.Map{}
 }
 
 // Execute processes an Effect based on the MgrFuncRunner's own MgrFuncRunnerState.
@@ -179,7 +181,7 @@ func (t *MgrfuncRnner) executeRun(effect *RunEffect) (*EffectResult, EffectDrive
 		t.mu.RUnlock()
 
 		if mgr != nil {
-			t.Reinitialize(mgr)
+			t.reinitialize(mgr)
 		}
 	}
 
