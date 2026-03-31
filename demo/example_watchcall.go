@@ -15,7 +15,7 @@ func main1() {
 	fmt.Println()
 
 	config := watch.DefaultWatcherConfig()
-	watcher := watch.NewWatcher(config, nil)
+	watcher := watch.NewWatcher(config)
 
 	// Simulated external data source
 	externalCounter := 0
@@ -69,7 +69,7 @@ func main1() {
 	})
 
 	fmt.Println("Starting watcher...")
-	err := watcher.Start()
+	err := watcher.StartAndRun()
 	if err != nil {
 		panic(err)
 	}
@@ -83,7 +83,7 @@ func main1() {
 	fmt.Println("\n=== Execution Summary ===")
 	watcher.GetLogger().PrintSummary()
 
-	err = watcher.Stop()
+	err = watcher.StopAll()
 	if err != nil {
 		fmt.Printf("Error stopping: %v\n", err)
 	}

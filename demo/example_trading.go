@@ -233,7 +233,7 @@ func main() {
 	// Create watcher
 	watcherConfig := watch.DefaultWatcherConfig()
 	watcherConfig.DefaultTimeout = 10 * time.Second
-	watcher := watch.NewWatcher(watcherConfig, nil)
+	watcher := watch.NewWatcher(watcherConfig)
 
 	// Create environment variables for managed function
 	envVars := map[string]string{
@@ -250,7 +250,7 @@ func main() {
 	fmt.Println("Starting trading bot...")
 	fmt.Printf("  [Before Start] State: %s\n", watcher.GetState())
 
-	err := watcher.Start()
+	err := watcher.StartAndRun()
 	if err != nil {
 		panic(err)
 	}
@@ -314,12 +314,12 @@ func main() {
 	watcher.GetLogger().PrintSummary()
 
 	// Stop watcher
-	fmt.Printf("\n[Before watcher.Stop()] State: %s\n", watcher.GetState())
-	err = watcher.Stop()
+	fmt.Printf("\n[Before watcher.StopAll()] State: %s\n", watcher.GetState())
+	err = watcher.StopAll()
 	if err != nil {
 		fmt.Printf("Error stopping: %v\n", err)
 	}
-	fmt.Printf("[After watcher.Stop()] State: %s\n", watcher.GetState())
+	fmt.Printf("[After watcher.StopAll()] State: %s\n", watcher.GetState())
 
 	fmt.Println("\n=== Demo Complete ===")
 }

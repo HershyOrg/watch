@@ -15,12 +15,17 @@ import (
 // Watcher is the core reactive framework engine.
 // It manages reactive state through Watch, executes managed functions,
 // and provides fault tolerance through supervision.
+//
+// Watcher는 3가지 범위를 제어하며, 각각 별도 메서드로 분리:
+//   - Self: StartSelf(), StopAll()
+//   - Manager: RunMgr(), StopMgr(), KillMgr()
+//   - WatchMachine: StartWm(), StopWm(), KillWm()
 type Watcher struct {
 	config  WatcherConfig
 	manager *manager.Manager
 
 	// State
-	isRunning atomic.Bool // watcher자체가 실행중인지의 값. (Run/ Stop)
+	isRunning atomic.Bool // watcher자체가 실행중인지의 값. (StartSelf / StopAll)
 
 	// WatchMachine Registry
 	machineRegistry *shared.SafeMap[string, *wm.WatchMachine]
@@ -35,60 +40,21 @@ type Watcher struct {
 
 // NewWatcher creates a new Watcher with the given configuration.
 // The Manager is created later when Manage is called.
-//
-// parentCtx (optional): Parent context for lifecycle management.
-//   - If provided: Watcher automatically stops when context is cancelled
-//   - If nil: Uses context.Background()
-//   - Auto-stop has 5-minute timeout, then forces shutdown
-func NewWatcher(config WatcherConfig, parentCtx context.Context) *Watcher {
+// Watcher는 자체 내부 context를 생성한다 (외부 ctx를 받지 않음).
+func NewWatcher(config WatcherConfig) *Watcher {
 	if config.DefaultTimeout == 0 {
 		config = DefaultWatcherConfig()
 	}
 
-	// Use parent context if provided, otherwise use Background
-	if parentCtx == nil {
-		parentCtx = context.Background()
-	}
-
-	// Create independent context for Watcher
 	rootCtx, cancel := context.WithCancel(context.Background())
 
-	w := &Watcher{
+	return &Watcher{
 		config:          config,
 		manager:         nil, // Manager created in Manage()
 		machineRegistry: shared.NewSafeMap[string, *wm.WatchMachine](),
 		rootCtx:         rootCtx,
 		rootCancel:      cancel,
 	}
-
-	// Auto-shutdown goroutine: monitors parent context
-	go func() {
-		<-parentCtx.Done()
-
-		if !w.isRunning.Load() {
-			return // Already stopped
-		}
-
-		fmt.Println("[Watcher] Parent context cancelled, stopping...")
-
-		// Call Stop() with 5-minute timeout
-		stopDone := make(chan error, 1)
-		go func() {
-			stopDone <- w.Stop()
-		}()
-
-		select {
-		case err := <-stopDone:
-			if err != nil {
-				fmt.Printf("[Watcher] Stop error: %v\n", err)
-			}
-		case <-time.After(5 * time.Minute):
-			fmt.Println("[Watcher] Stop timeout (5 min), forcing shutdown...")
-			w.forceShutdown()
-		}
-	}()
-
-	return w
 }
 
 // Manage registers a function to be managed by the Watcher.
@@ -114,8 +80,11 @@ func (w *Watcher) Manage(fn manager.ManagedFunc, name string, envVars map[string
 	return manager.NewCleanupBuilder(w.manager)
 }
 
-// Start begins the Watcher's execution.
-func (w *Watcher) Start() error {
+// --- Self 범위 (Start 기반) ---
+
+// StartSelf begins the Watcher's own resources (API server).
+// isRunning을 true로 설정한다. Manager 실행은 별도로 RunMgr()를 호출해야 한다.
+func (w *Watcher) StartSelf() error {
 	if !w.isRunning.CompareAndSwap(false, true) {
 		return fmt.Errorf("watcher already running")
 	}
@@ -128,60 +97,57 @@ func (w *Watcher) Start() error {
 	// Start API server (non-blocking)
 	apiServer, err := w.StartAPIServer()
 	if err != nil {
+		w.isRunning.Store(false)
 		return fmt.Errorf("failed to start API server: %w", err)
 	}
 	w.apiServer = apiServer
 
-	// Send an initial empty UserEvent to trigger first execution
-	w.manager.SendUserEvent(nil)
-
 	return nil
 }
 
-// Stop gracefully stops the Watcher.
-func (w *Watcher) Stop() error {
+// StopAll gracefully stops everything: Manager → WatchMachines → Self.
+// "자기 자신 종료 = 전체 종료"라는 의미론.
+func (w *Watcher) StopAll() error {
 	if !w.isRunning.Load() {
 		return fmt.Errorf("watcher not running")
 	}
 
-	// Check if Manager is already in a terminal state
-	currentState := w.manager.GetControlState()
-	if currentState.IsTerminal() {
-		// Already stopped - just clean up Watcher resources
-		if w.apiServer != nil {
-			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer shutdownCancel()
-			w.apiServer.Shutdown(shutdownCtx)
-			w.apiServer = nil
-		}
-		w.stopAllWatches()
-		w.rootCancel()
-		w.isRunning.Store(false)
-		return nil
-	}
+	// 1. Manager 정지
+	if w.manager != nil {
+		currentState := w.manager.GetControlState()
+		if !currentState.IsTerminal() {
+			w.manager.RequestStop("StopAll requested")
 
-	// Send Stop control event
-	w.manager.RequestStop("user requested stop")
+			// 터미널 상태 + cleanup 완료 대기
+			ticker := time.NewTicker(500 * time.Millisecond)
+			timeout := time.After(300 * time.Second)
 
-	// Wait for cleanup completion and terminal state using polling
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
-	timeout := time.After(300 * time.Second)
-
-	for {
-		select {
-		case <-ticker.C:
-			cs := w.manager.GetControlState()
-			if cs.IsTerminal() && w.manager.IsCleanupCompleted() {
-				goto StopCompleted
+		waitLoop:
+			for {
+				select {
+				case <-ticker.C:
+					cs := w.manager.GetControlState()
+					if cs.IsTerminal() && w.manager.IsCleanupCompleted() {
+						break waitLoop
+					}
+				case <-timeout:
+					fmt.Println("[Watcher] StopAll: Manager stop timeout, forcing kill...")
+					w.manager.RequestKill("StopAll timeout")
+					time.Sleep(1 * time.Second)
+					break waitLoop
+				}
 			}
-		case <-timeout:
-			return fmt.Errorf("stop timeout: cleanup and state transition not completed within 60 seconds")
+			ticker.Stop()
 		}
+
+		// 2. Manager 이벤트 루프 종료
+		w.manager.Close()
 	}
 
-StopCompleted:
-	// Shutdown API server
+	// 3. 모든 WatchMachine 정지
+	w.stopAllWatches()
+
+	// 4. API 서버 Shutdown
 	if w.apiServer != nil {
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer shutdownCancel()
@@ -191,42 +157,132 @@ StopCompleted:
 				fmt.Println("[Watcher] API server shutdown timeout (5s), forcing close...")
 				if closeErr := w.apiServer.Close(); closeErr != nil {
 					fmt.Printf("[Watcher] API server force close error: %v\n", closeErr)
-				} else {
-					fmt.Println("[Watcher] API server force closed successfully")
 				}
 			} else {
 				fmt.Printf("[Watcher] API server shutdown error: %v\n", err)
 			}
-		} else {
-			fmt.Println("[Watcher] API server stopped gracefully")
 		}
 		w.apiServer = nil
 	}
 
-	// Finalize Watcher shutdown
-	w.stopAllWatches()
+	// 5. Watcher 자체 종료
 	w.rootCancel()
 	w.isRunning.Store(false)
 
 	return nil
 }
 
-// forceShutdown forcefully terminates the Watcher (last resort).
-func (w *Watcher) forceShutdown() {
-	fmt.Println("[Watcher] Force shutdown initiated...")
+// --- Syntactic Sugar ---
 
-	w.rootCancel()
-	w.stopAllWatches()
+// StartAndRun is a convenience method: StartSelf() + RunMgr().
+// Watcher를 시작하고 Manager의 ManagedFunc를 초기 실행한다.
+func (w *Watcher) StartAndRun() error {
+	if err := w.StartSelf(); err != nil {
+		return err
+	}
+	return w.RunMgr()
+}
 
-	if w.apiServer != nil {
-		if err := w.apiServer.Close(); err != nil {
-			fmt.Printf("[Watcher] Force close API server error: %v\n", err)
-		}
+// --- Manager 범위 (Run 기반) ---
+
+// RunMgr executes the Manager's ManagedFunc.
+// 초기 실행과 재실행(터미널 상태에서) 모두 이 메서드 하나로 처리.
+func (w *Watcher) RunMgr() error {
+	if !w.isRunning.Load() {
+		return fmt.Errorf("watcher not running")
+	}
+	if w.manager == nil {
+		return fmt.Errorf("no managed function registered")
 	}
 
-	w.isRunning.Store(false)
-	fmt.Println("[Watcher] Force shutdown complete")
+	currentState := w.manager.GetControlState()
+
+	if currentState.IsTerminal() {
+		// 재실행: RequestRun(needInit=true) + Idle 상태 대기
+		w.manager.RequestRun("run requested", true)
+		return w.waitForState(ControlIdle, 60*time.Second)
+	}
+
+	if currentState == ControlIdle {
+		// 초기 실행
+		w.manager.RequestRun("watcher started", true)
+		return nil
+	}
+
+	return fmt.Errorf("manager is already running (current state: %s)", currentState)
 }
+
+// StopMgr sends a stop event to the Manager and waits for terminal state.
+func (w *Watcher) StopMgr() error {
+	if !w.isRunning.Load() {
+		return fmt.Errorf("watcher not running")
+	}
+	if w.manager == nil {
+		return fmt.Errorf("no managed function registered")
+	}
+
+	currentState := w.manager.GetControlState()
+	if currentState.IsTerminal() {
+		return nil // Already stopped
+	}
+
+	w.manager.RequestStop("user requested manager stop")
+
+	return w.waitForTerminalState(60 * time.Second)
+}
+
+// KillMgr forcefully terminates the Manager.
+func (w *Watcher) KillMgr() error {
+	if !w.isRunning.Load() {
+		return fmt.Errorf("watcher not running")
+	}
+	if w.manager == nil {
+		return fmt.Errorf("no managed function registered")
+	}
+
+	currentState := w.manager.GetControlState()
+	if currentState.IsTerminal() {
+		return nil
+	}
+
+	w.manager.RequestKill("user requested manager kill")
+
+	return w.waitForTerminalState(30 * time.Second)
+}
+
+// --- WatchMachine 범위 (Start 기반) ---
+
+// StartWm starts a specific WatchMachine by varName.
+func (w *Watcher) StartWm(varName string) error {
+	machine, ok := w.machineRegistry.Load(varName)
+	if !ok {
+		return fmt.Errorf("watchMachine not found: %s", varName)
+	}
+	machine.Start()
+	return nil
+}
+
+// StopWm stops a specific WatchMachine by varName.
+func (w *Watcher) StopWm(varName string) error {
+	machine, ok := w.machineRegistry.Load(varName)
+	if !ok {
+		return fmt.Errorf("watchMachine not found: %s", varName)
+	}
+	machine.Stop()
+	return nil
+}
+
+// KillWm forcefully terminates a specific WatchMachine by varName.
+func (w *Watcher) KillWm(varName string) error {
+	machine, ok := w.machineRegistry.Load(varName)
+	if !ok {
+		return fmt.Errorf("watchMachine not found: %s", varName)
+	}
+	machine.Kill()
+	return nil
+}
+
+// --- 메시지 전송 ---
 
 // SendMessage sends a user message to the managed function.
 func (w *Watcher) SendMessage(content string) error {
@@ -243,6 +299,8 @@ func (w *Watcher) SendMessage(content string) error {
 
 	return nil
 }
+
+// --- 상태 조회 ---
 
 // GetState returns the current ControlState.
 func (w *Watcher) GetState() ControlState {
@@ -264,45 +322,7 @@ func (w *Watcher) IsRunning() bool {
 	return w.isRunning.Load()
 }
 
-// StopManager stops the Manager (enters Stopped state).
-func (w *Watcher) StopManager() error {
-	if !w.isRunning.Load() {
-		return fmt.Errorf("watcher not running")
-	}
-
-	currentState := w.manager.GetControlState()
-	if currentState.IsTerminal() {
-		return nil // Already stopped
-	}
-
-	w.manager.RequestStop("user requested manager stop")
-
-	return w.waitForTerminalState(60 * time.Second)
-}
-
-// RunManager restarts the Manager from a terminal state.
-func (w *Watcher) RunManager() error {
-	if !w.isRunning.Load() {
-		return fmt.Errorf("watcher not running")
-	}
-
-	currentState := w.manager.GetControlState()
-	if !currentState.IsTerminal() {
-		return fmt.Errorf("can only run from terminal states, current: %s", currentState)
-	}
-
-	// Send RunRequested control event with NeedInit
-	w.manager.RequestRun("user requested manager restart", true)
-
-	// Wait for state transition
-	time.Sleep(100 * time.Millisecond)
-
-	// Trigger first execution with empty message
-	w.manager.SendUserEvent(nil)
-
-	// Wait for Idle state
-	return w.waitForState(ControlIdle, 60*time.Second)
-}
+// --- private helpers ---
 
 // waitForState waits for Manager to reach the target ControlState.
 func (w *Watcher) waitForState(targetState ControlState, timeout time.Duration) error {

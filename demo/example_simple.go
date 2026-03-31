@@ -14,7 +14,7 @@ func main2() {
 	config := watch.DefaultWatcherConfig()
 	config.DefaultTimeout = 5 * time.Second
 
-	watcher := watch.NewWatcher(config, nil)
+	watcher := watch.NewWatcher(config)
 
 	// Managed function with reactive state
 	counter := 0
@@ -60,7 +60,7 @@ func main2() {
 
 	// Start watcher
 	fmt.Println("Starting watcher...")
-	err := watcher.Start()
+	err := watcher.StartAndRun()
 	if err != nil {
 		panic(err)
 	}
@@ -87,7 +87,7 @@ func main2() {
 	watcher.GetLogger().PrintSummary()
 
 	// Stop watcher
-	err = watcher.Stop()
+	err = watcher.StopAll()
 	if err != nil {
 		fmt.Printf("Error stopping watcher: %v\n", err)
 	}

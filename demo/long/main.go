@@ -92,7 +92,7 @@ func main() {
 	defer cancel()
 
 	// Create Watcher with timeout context - it will auto-stop when context expires
-	watcher := watch.NewWatcher(config, ctx)
+	watcher := watch.NewWatcher(config)
 	fmt.Println("   ✅ Watcher created with 10-minute timeout context")
 
 	// Environment variables for managed function
@@ -125,7 +125,7 @@ func main() {
 	fmt.Println("   Watcher will auto-stop after 10 minutes")
 	fmt.Println()
 
-	if err := watcher.Start(); err != nil {
+	if err := watcher.StartAndRun(); err != nil {
 		fmt.Printf("❌ Initialization failed: %v\n", err)
 		os.Exit(1)
 	}
@@ -140,7 +140,7 @@ func main() {
 	case <-sigChan:
 		// User interrupt
 		fmt.Println("\n\n🛑 Interrupt signal received...")
-		watcher.Stop()
+		watcher.StopAll()
 	}
 
 	// Start user input handler (only if stdin is available)
