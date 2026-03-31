@@ -11,8 +11,6 @@ type Subscriber interface {
 
 	// GetName은 구독자 식별용 이름을 반환함.
 	GetName() string
-	//readLatestFromAllWMs 를 통해서 구독자는 Wm들의 최신값 읽음.
-	readLatestFromAllWMs() map[string]shared.RawWatchValue
 }
 
 // Publisher는 WatchMachine이 Manager를 "발행자"로 바라봤을 때의 interface임.
