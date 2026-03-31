@@ -11,6 +11,8 @@ type Subscriber interface {
 
 	// GetName은 구독자 식별용 이름을 반환함.
 	GetName() string
+	// GetNewSigAppendedChan() 으로 구독용 채널 받는다.
+	GetNewSigAppendedChan() chan struct{}
 }
 
 // Publisher는 WatchMachine이 Manager를 "발행자"로 바라봤을 때의 interface임.

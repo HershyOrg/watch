@@ -88,8 +88,7 @@ func (r *Reducer) tryProcessNextEvent(runner *MgrfuncRnner) bool {
 	cs := r.state.GetControlState()
 
 	// Priority 0: ControlEvent (highest)
-	select {
-	case event := <-r.signals.ControlEventChan:
+	if event, ok := r.signals.DequeueControlEvent(); ok {
 		prevSnapshot := r.state.Snapshot()
 
 		// 1. Reduce: update ControlState + determine Effect
@@ -105,13 +104,11 @@ func (r *Reducer) tryProcessNextEvent(runner *MgrfuncRnner) bool {
 		}
 		r.logAndExecute(action, runner)
 		return true
-	default:
 	}
 
 	// Priority 1: UserEvent
 	if r.canProcessUserEvent(cs) {
-		select {
-		case event := <-r.signals.UserEventChan:
+		if event, ok := r.signals.DequeueUserEvent(); ok {
 			prevSnapshot := r.state.Snapshot()
 
 			// 1. Reduce: update ControlState + determine Effect
@@ -127,7 +124,6 @@ func (r *Reducer) tryProcessNextEvent(runner *MgrfuncRnner) bool {
 			}
 			r.logAndExecute(action, runner)
 			return true
-		default:
 		}
 	}
 

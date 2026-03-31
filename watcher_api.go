@@ -79,9 +79,9 @@ func (la *loggerAdapter) GetEffectResults() []interface{} {
 	return result
 }
 
-// signalsAdapter adapts manager.SignalChannels to api.SignalsInterface
+// signalsAdapter adapts Manager's signal queue info to api.SignalsInterface
 type signalsAdapter struct {
-	signals *manager.SignalChannels
+	mgr *manager.Manager
 }
 
 func (sa *signalsAdapter) GetVarSigCount() int {
@@ -89,62 +89,26 @@ func (sa *signalsAdapter) GetVarSigCount() int {
 }
 
 func (sa *signalsAdapter) GetUserSigCount() int {
-	return len(sa.signals.UserEventChan)
+	userCount, _ := sa.mgr.GetSignalQueueLengths()
+	return userCount
 }
 
 func (sa *signalsAdapter) GetManagerSigCount() int {
-	return len(sa.signals.ControlEventChan)
+	_, controlCount := sa.mgr.GetSignalQueueLengths()
+	return controlCount
 }
 
 func (sa *signalsAdapter) PeekSignals(maxCount int) []api.SignalEntry {
-	entries := []api.SignalEntry{}
-
-	// Peek from each channel (non-blocking read and write back)
-	userCount := len(sa.signals.UserEventChan)
-	watcherCount := len(sa.signals.ControlEventChan)
-
-	// Distribute maxCount across channels proportionally
-	userLimit := min(userCount, maxCount/2)
-	watcherLimit := min(watcherCount, maxCount/2)
-
-	// Peek UserSig
-	for i := 0; i < userLimit && i < userCount; i++ {
-		select {
-		case sig := <-sa.signals.UserEventChan:
-			entries = append(entries, api.SignalEntry{
-				Type:      "user",
-				Content:   sig.String(),
-				CreatedAt: sig.CreatedAt(),
-			})
-			sa.signals.UserEventChan <- sig
-		default:
-			break
-		}
+	peekEntries := sa.mgr.PeekSignals(maxCount)
+	entries := make([]api.SignalEntry, 0, len(peekEntries))
+	for _, pe := range peekEntries {
+		entries = append(entries, api.SignalEntry{
+			Type:      pe.Type,
+			Content:   pe.Content,
+			CreatedAt: pe.CreatedAt,
+		})
 	}
-
-	// Peek WatcherSig
-	for i := 0; i < watcherLimit && i < watcherCount; i++ {
-		select {
-		case sig := <-sa.signals.ControlEventChan:
-			entries = append(entries, api.SignalEntry{
-				Type:      "watcher",
-				Content:   sig.String(),
-				CreatedAt: sig.CreatedAt(),
-			})
-			sa.signals.ControlEventChan <- sig
-		default:
-			break
-		}
-	}
-
 	return entries
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 // managerAdapter adapts manager.Manager to api.ManagerInterface
@@ -244,7 +208,7 @@ func (w *Watcher) StartAPIServer() (*WatcherAPIServer, error) {
 
 	// Create adapters
 	loggerAdp := &loggerAdapter{logger: w.manager.GetLogger()}
-	signalsAdp := &signalsAdapter{signals: w.manager.GetSignals()}
+	signalsAdp := &signalsAdapter{mgr: w.manager}
 	managerAdp := &managerAdapter{manager: w.manager}
 	varStateAdp := &varStateAdapter{state: w.manager.GetManagerState().VarState}
 	configAdp := &configAdapter{config: &w.config}

@@ -53,7 +53,7 @@ func WatchCall[T any](
 			LoopCtxConfig:         wm.LoopContextConfig{RunContextTimeout: 1 * time.Minute},
 		})
 		registry.RegisterWatchMachine(mgr.GetName(), machine)
-		machine.Subscribe(mgr, mgr.GetSignals().NewSigAppended)
+		machine.RegisterSubscriber(mgr)
 		machine.Start()
 	}
 
@@ -93,7 +93,7 @@ func WatchFlow[T any](
 			LoopCtxConfig:         wm.LoopContextConfig{RunContextTimeout: 1 * time.Minute},
 		})
 		registry.RegisterWatchMachine(mgr.GetName(), machine)
-		machine.Subscribe(mgr, mgr.GetSignals().NewSigAppended)
+		machine.RegisterSubscriber(mgr)
 		machine.Start()
 	}
 

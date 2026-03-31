@@ -231,9 +231,9 @@ func (wm *WatchMachine) ReadLatestFor(subscriberName string) (shared.RawWatchVal
 	return wm.loopHistory.LastValue(), false
 }
 
-// Subscribe는 구독자를 등록한다. Marker 생성 + notifyCh 등록 + Subscribers 추가.
-func (wm *WatchMachine) Subscribe(sub Subscriber, notifyCh chan struct{}) {
+// RegisterSubscriber는 구독자를 등록한다.
+func (wm *WatchMachine) RegisterSubscriber(sub Subscriber) {
 	wm.marker.Register(sub.GetName())
-	*wm.loop.notifyChs = append(*wm.loop.notifyChs, notifyCh)
+	*wm.loop.notifyChs = append(*wm.loop.notifyChs, sub.GetNewSigAppendedChan())
 	wm.Subscribers = append(wm.Subscribers, sub)
 }

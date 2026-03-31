@@ -125,9 +125,6 @@ func (w *Watcher) Start() error {
 		return fmt.Errorf("no managed function registered")
 	}
 
-	// Start Manager components
-	w.manager.Start(w.rootCtx)
-
 	// Start API server (non-blocking)
 	apiServer, err := w.StartAPIServer()
 	if err != nil {
@@ -136,10 +133,7 @@ func (w *Watcher) Start() error {
 	w.apiServer = apiServer
 
 	// Send an initial empty UserEvent to trigger first execution
-	w.manager.GetSignals().SendUserEvent(&manager.UserMessageReceived{
-		ReceivedTime: time.Now(),
-		UserMessage:  nil, // Empty message for initialization
-	})
+	w.manager.SendUserEvent(nil)
 
 	return nil
 }
@@ -151,7 +145,7 @@ func (w *Watcher) Stop() error {
 	}
 
 	// Check if Manager is already in a terminal state
-	currentState := w.manager.GetManagerState().GetControlState()
+	currentState := w.manager.GetControlState()
 	if currentState.IsTerminal() {
 		// Already stopped - just clean up Watcher resources
 		if w.apiServer != nil {
@@ -167,11 +161,7 @@ func (w *Watcher) Stop() error {
 	}
 
 	// Send Stop control event
-	w.manager.GetSignals().SendControlEvent(&manager.ControlEvent{
-		ReceivedTime: time.Now(),
-		Kind:         manager.StopRequested,
-		Reason:       "user requested stop",
-	})
+	w.manager.RequestStop("user requested stop")
 
 	// Wait for cleanup completion and terminal state using polling
 	ticker := time.NewTicker(500 * time.Millisecond)
@@ -181,8 +171,8 @@ func (w *Watcher) Stop() error {
 	for {
 		select {
 		case <-ticker.C:
-			cs := w.manager.GetManagerState().GetControlState()
-			if cs.IsTerminal() && w.manager.GetRunner().IsCleanupCompleted() {
+			cs := w.manager.GetControlState()
+			if cs.IsTerminal() && w.manager.IsCleanupCompleted() {
 				goto StopCompleted
 			}
 		case <-timeout:
@@ -249,17 +239,14 @@ func (w *Watcher) SendMessage(content string) error {
 		ReceivedAt: time.Now(),
 	}
 
-	w.manager.GetSignals().SendUserEvent(&manager.UserMessageReceived{
-		ReceivedTime: time.Now(),
-		UserMessage:  msg,
-	})
+	w.manager.SendUserEvent(msg)
 
 	return nil
 }
 
 // GetState returns the current ControlState.
 func (w *Watcher) GetState() ControlState {
-	return w.manager.GetManagerState().GetControlState()
+	return w.manager.GetControlState()
 }
 
 // GetLogger returns the Watcher's logger for inspection.
@@ -283,16 +270,12 @@ func (w *Watcher) StopManager() error {
 		return fmt.Errorf("watcher not running")
 	}
 
-	currentState := w.manager.GetManagerState().GetControlState()
+	currentState := w.manager.GetControlState()
 	if currentState.IsTerminal() {
 		return nil // Already stopped
 	}
 
-	w.manager.GetSignals().SendControlEvent(&manager.ControlEvent{
-		ReceivedTime: time.Now(),
-		Kind:         manager.StopRequested,
-		Reason:       "user requested manager stop",
-	})
+	w.manager.RequestStop("user requested manager stop")
 
 	return w.waitForTerminalState(60 * time.Second)
 }
@@ -303,27 +286,19 @@ func (w *Watcher) RunManager() error {
 		return fmt.Errorf("watcher not running")
 	}
 
-	currentState := w.manager.GetManagerState().GetControlState()
+	currentState := w.manager.GetControlState()
 	if !currentState.IsTerminal() {
 		return fmt.Errorf("can only run from terminal states, current: %s", currentState)
 	}
 
 	// Send RunRequested control event with NeedInit
-	w.manager.GetSignals().SendControlEvent(&manager.ControlEvent{
-		ReceivedTime: time.Now(),
-		Kind:         manager.RunRequested,
-		NeedInit:     true,
-		Reason:       "user requested manager restart",
-	})
+	w.manager.RequestRun("user requested manager restart", true)
 
 	// Wait for state transition
 	time.Sleep(100 * time.Millisecond)
 
 	// Trigger first execution with empty message
-	w.manager.GetSignals().SendUserEvent(&manager.UserMessageReceived{
-		ReceivedTime: time.Now(),
-		UserMessage:  nil,
-	})
+	w.manager.SendUserEvent(nil)
 
 	// Wait for Idle state
 	return w.waitForState(ControlIdle, 60*time.Second)
@@ -338,7 +313,7 @@ func (w *Watcher) waitForState(targetState ControlState, timeout time.Duration) 
 	for {
 		select {
 		case <-ticker.C:
-			currentState := w.manager.GetManagerState().GetControlState()
+			currentState := w.manager.GetControlState()
 			if currentState == targetState {
 				return nil
 			}
@@ -349,7 +324,7 @@ func (w *Watcher) waitForState(targetState ControlState, timeout time.Duration) 
 				return fmt.Errorf("manager killed while waiting for state %s", targetState)
 			}
 		case <-deadline:
-			currentState := w.manager.GetManagerState().GetControlState()
+			currentState := w.manager.GetControlState()
 			return fmt.Errorf("timeout waiting for state %s (current: %s)", targetState, currentState)
 		}
 	}
@@ -364,11 +339,11 @@ func (w *Watcher) waitForTerminalState(timeout time.Duration) error {
 	for {
 		select {
 		case <-ticker.C:
-			if w.manager.GetManagerState().GetControlState().IsTerminal() {
+			if w.manager.GetControlState().IsTerminal() {
 				return nil
 			}
 		case <-deadline:
-			currentState := w.manager.GetManagerState().GetControlState()
+			currentState := w.manager.GetControlState()
 			return fmt.Errorf("timeout waiting for terminal state (current: %s)", currentState)
 		}
 	}

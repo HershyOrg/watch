@@ -28,7 +28,7 @@ func (cb *CleanupBuilder) Cleanup(cleanupFn func(ctx shared.ManageContext)) *Cle
 	}
 
 	// Set cleaner in the Manager's MgrFuncRunner
-	cb.manager.GetRunner().SetCleaner(cleaner)
+	cb.manager.funcRunner.SetCleaner(cleaner)
 
 	return cb
 }
