@@ -30,10 +30,6 @@ type Watcher struct {
 	// WatchMachine Registry
 	machineRegistry *shared.SafeMap[string, *wm.WatchMachine]
 
-	// Lifecycle
-	rootCtx    context.Context
-	rootCancel context.CancelFunc
-
 	// API Server
 	apiServer *WatcherAPIServer
 }
@@ -46,14 +42,10 @@ func NewWatcher(config WatcherConfig) *Watcher {
 		config = DefaultWatcherConfig()
 	}
 
-	rootCtx, cancel := context.WithCancel(context.Background())
-
 	return &Watcher{
 		config:          config,
 		manager:         nil, // Manager created in Manage()
 		machineRegistry: shared.NewSafeMap[string, *wm.WatchMachine](),
-		rootCtx:         rootCtx,
-		rootCancel:      cancel,
 	}
 }
 
@@ -166,7 +158,6 @@ func (w *Watcher) StopAll() error {
 	}
 
 	// 5. Watcher 자체 종료
-	w.rootCancel()
 	w.isRunning.Store(false)
 
 	return nil

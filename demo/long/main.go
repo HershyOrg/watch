@@ -60,7 +60,7 @@ func main() {
 
 	// Wait for initial prices
 	fmt.Println("\n⏳ Waiting for initial price data...")
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		if stream.GetCurrentBTC() > 0 && stream.GetCurrentETH() > 0 {
 			fmt.Printf("   ✅ Initial prices received: BTC=$%.2f, ETH=$%.2f\n",
 				stream.GetCurrentBTC(), stream.GetCurrentETH())
