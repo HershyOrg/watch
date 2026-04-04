@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -10,54 +9,23 @@ import (
 
 	"github.com/HershyOrg/watch"
 	"github.com/HershyOrg/watch/shared"
-
 	"github.com/HershyOrg/watch/wm"
 )
 
 const (
-	// Demo configuration
 	DemoName          = "Long-Running Trading Simulator"
 	DemoVersion       = "1.0.0"
-	TargetDuration    = 10 * time.Minute // 10 minutes
+	TargetDuration    = 10 * time.Minute
 	StatsInterval     = 3 * time.Minute
 	RebalanceInterval = 10 * time.Second
-	InitialCapital    = 10000.0 // $10,000 USD
+	InitialCapital    = 10000.0
 )
 
 func main() {
 	fmt.Println(strings.Repeat("═", 80))
 	fmt.Printf("🚀 %s v%s\n", DemoName, DemoVersion)
 	fmt.Println(strings.Repeat("═", 80))
-	fmt.Printf("⏱️  Target Duration: %s\n", TargetDuration)
-	fmt.Printf("📊 Stats Interval: %s\n", StatsInterval)
-	fmt.Printf("💼 Initial Capital: $%.2f\n", InitialCapital)
-	fmt.Println(strings.Repeat("═", 80))
 
-	// Initialize components
-	fmt.Println("\n🔧 Initializing components...")
-
-	stream := NewBinanceStream()
-	fmt.Println("   ✅ BinanceStream created")
-
-	simulator := NewTradingSimulator(InitialCapital)
-	fmt.Println("   ✅ TradingSimulator created")
-
-	statsCollector := NewStatsCollector()
-	fmt.Println("   ✅ StatsCollector created")
-
-	commandHandler := NewCommandHandler(stream, simulator, statsCollector)
-	fmt.Println("   ✅ CommandHandler created")
-
-	// Connect to Binance WebSocket
-	fmt.Println("\n🌐 Connecting to Binance WebSocket...")
-	if err := stream.Connect(); err != nil {
-		fmt.Printf("❌ Failed to connect: %v\n", err)
-		os.Exit(1)
-	}
-	
-
-	// Create Watcher config
-	fmt.Println("\n🔍 Creating Hersh Watcher...")
 	config := watch.DefaultWatcherConfig()
 	config.DefaultTimeout = 5 * time.Minute
 	config.RecoveryPolicy.MinConsecutiveFailures = 5
@@ -65,207 +33,144 @@ func main() {
 	config.RecoveryPolicy.BaseRetryDelay = 10 * time.Second
 	config.RecoveryPolicy.MaxRetryDelay = 5 * time.Minute
 	config.RecoveryPolicy.LightweightRetryDelays = []time.Duration{
-		30 * time.Second,
-		1 * time.Minute,
-		2 * time.Minute,
+		30 * time.Second, 1 * time.Minute, 2 * time.Minute,
 	}
 
-	// Create Watcher
 	watcher := watch.NewWatcher(config)
-	fmt.Println("   ✅ Watcher created")
+	watcher.Manage(mainReducer, "TradingSimulator", map[string]string{
+		"DEMO_NAME": DemoName, "DEMO_VERSION": DemoVersion,
+	}).Cleanup(cleanupReducer)
 
-	// Environment variables for managed function
-	envVars := map[string]string{
-		"DEMO_NAME":    DemoName,
-		"DEMO_VERSION": DemoVersion,
-	}
-
-	// Register managed function with closure and envVars
-	watcher.Manage(func(msg *watch.Message, ctx watch.ManageContext) (watch.ControlSignal, error) {
-		return mainReducer(
-			msg, ctx,
-			stream,
-			simulator,
-			statsCollector,
-			commandHandler,
-		)
-	}, "TradingSimulator", envVars).Cleanup(func(ctx watch.ManageContext) {
-		cleanup(ctx, stream, simulator, statsCollector)
-	})
-
-	// Start Watcher and wait for completion
-	fmt.Println("\n▶️  Starting main trading loop...")
-	fmt.Println("   Type 'help' for available commands")
-	fmt.Println("   Press Ctrl+C to stop")
-	fmt.Println("   Watcher will auto-stop after 10 minutes")
-	fmt.Println()
-
+	fmt.Println("\n▶️  Press Ctrl+C to stop | Auto-stop after 10 minutes")
 	result, err := watcher.StartAndWait(
 		watch.WithTimeout(TargetDuration),
 		watch.WithInterrupt(),
 	)
 	if err != nil {
-		fmt.Printf("❌ Initialization failed: %v\n", err)
+		fmt.Printf("❌ Failed: %v\n", err)
 		os.Exit(1)
 	}
 
 	switch result.Reason {
 	case watch.WaitReasonTimeout:
-		fmt.Println("\n\n⏰ Target duration reached (10 minutes)")
+		fmt.Println("\n⏰ Target duration reached")
 	case watch.WaitReasonSignal:
-		fmt.Println("\n\n🛑 Interrupt signal received, stopped gracefully")
+		fmt.Println("\n🛑 Stopped gracefully")
 	default:
-		fmt.Printf("\n\nWatcher ended: %s (reason: %s)\n", result.State, result.Reason)
+		fmt.Printf("\nEnded: %s (%s)\n", result.State, result.Reason)
 	}
 
-	// Print logger summary
-	fmt.Println("\n" + strings.Repeat("═", 80))
-	fmt.Println("📋 EXECUTION LOGS")
-	fmt.Println(strings.Repeat("═", 80))
 	watcher.GetLogger().PrintSummary()
-
-	fmt.Println("\n✅ Demo completed successfully")
-	fmt.Println(strings.Repeat("═", 80))
 }
 
-// mainReducer is the main managed function for the Watcher
-func mainReducer(
-	msg *watch.Message,
-	ctx watch.ManageContext,
-	stream *BinanceStream,
-	simulator *TradingSimulator,
-	statsCollector *StatsCollector,
-	commandHandler *CommandHandler,
-) (watch.ControlSignal, error) {
-	// WatchFlow: BTC price (real-time from WebSocket)
-	btcHV := watch.WatchFlow(0.0,
-		flowValueStreamToFlowHandle(stream.GetBTCPriceStream()),
-		"btc_price", ctx)
-	// WatchFlow: ETH price (real-time from WebSocket)
-	ethHV := watch.WatchFlow(0.0,
-		flowValueStreamToFlowHandle(stream.GetETHPriceStream()),
-		"eth_price", ctx)
+// --- mainReducer ---
 
-	// WatchTick: Stats ticker (1 minute interval)
+func mainReducer(msg *watch.Message, ctx watch.ManageContext) (watch.ControlSignal, error) {
+	// WatchFlow: 실시간 가격 (Setup에서 WebSocket 생성+연결, FlowCtx 종료 시 자동 Close)
+	btcHV := watch.WatchFlow(0.0, newBinancePriceFlow("BTC"), "btc_price", ctx)
+	ethHV := watch.WatchFlow(0.0, newBinancePriceFlow("ETH"), "eth_price", ctx)
+
+	// WatchTick
 	statsTick := watch.WatchTick("stats_ticker", StatsInterval, ctx)
-	// WatchTick: Rebalance ticker (1 hour interval)
 	rebalanceTick := watch.WatchTick("rebalance_ticker", RebalanceInterval, ctx)
 
+	// TradingSimulator (Memo: 1회 생성, 캐시)
+	sim := watch.Memo(func() *TradingSimulator {
+		return NewTradingSimulator(InitialCapital)
+	}, "sim", ctx)
+
+	// 가격 반영
 	if btcHV.IsUpdatedValide() {
-		simulator.UpdatePrice("BTC", btcHV.Value)
+		sim.UpdatePrice("BTC", btcHV.Value)
 	}
 	if ethHV.IsUpdatedValide() {
-		simulator.UpdatePrice("ETH", ethHV.Value)
+		sim.UpdatePrice("ETH", ethHV.Value)
 	}
 
+	// 주기적 리포트
 	if statsTick.IsTriggered(ctx) {
-		statsCollector.PrintStats(stream, simulator)
-		watch.PrintWithLog(fmt.Sprintf("   (Stats tick #%d at %s)", statsTick.Value.TickCount, statsTick.Value.Time.Format("15:04:05")), ctx)
+		p := sim.GetPortfolio()
+		watch.PrintWithLog(fmt.Sprintf(
+			"\n📊 [%s] BTC=$%.2f ETH=$%.2f | Portfolio: $%.2f (%.2f%%) | Trades: %d",
+			time.Now().Format("15:04:05"),
+			btcHV.Value, ethHV.Value,
+			p.CurrentValue, p.ProfitLossPercent,
+			len(sim.GetTrades())), ctx)
 	}
 
+	// 리밸런스
 	if rebalanceTick.IsTriggered(ctx) {
-		watch.PrintWithLog(fmt.Sprintf("\n⏰ Hourly rebalance triggered (tick #%d at %s)...",
-			rebalanceTick.Value.TickCount, rebalanceTick.Value.Time.Format("15:04:05")), ctx)
-		trades := simulator.Rebalance()
-
-		if len(trades) > 0 {
-			watch.PrintWithLog(fmt.Sprintf("   Executed %d rebalancing trades", len(trades)), ctx)
-			for _, t := range trades {
-				watch.PrintWithLog(fmt.Sprintf("      %s %s: %.6f @ $%.2f",
-					t.Action, t.Symbol, t.Amount, t.Price), ctx)
-			}
-		} else {
-			watch.PrintWithLog("   No rebalancing needed", ctx)
+		trades := sim.Rebalance()
+		for _, t := range trades {
+			watch.PrintWithLog(fmt.Sprintf("   ⏰ %s %s: %.6f @ $%.2f",
+				t.Action, t.Symbol, t.Amount, t.Price), ctx)
 		}
 	}
 
-	// Execute trading strategy (unless paused)
-	if !simulator.IsPaused() {
-		trades := simulator.ExecuteStrategy()
-
+	// 전략 실행
+	if !sim.IsPaused() {
+		trades := sim.ExecuteStrategy()
 		if len(trades) > 0 {
-			watch.PrintWithLog(fmt.Sprintf("\n💹 Strategy executed %d trades:", len(trades)), ctx)
+			watch.PrintWithLog(fmt.Sprintf("\n💹 %d trades:", len(trades)), ctx)
 			for _, t := range trades {
 				watch.PrintWithLog(fmt.Sprintf("   %s %s %s: %.6f @ $%.2f (%s)",
 					t.Time.Format("15:04:05"),
 					t.Action, t.Symbol, t.Amount, t.Price, t.Reason), ctx)
 			}
-
-			portfolio := simulator.GetPortfolio()
-			watch.PrintWithLog(fmt.Sprintf("   Portfolio Value: $%.2f (%.2f%%)",
-				portfolio.CurrentValue, portfolio.ProfitLossPercent), ctx)
+			p := sim.GetPortfolio()
+			watch.PrintWithLog(fmt.Sprintf("   Portfolio: $%.2f (%.2f%%)",
+				p.CurrentValue, p.ProfitLossPercent), ctx)
 		}
 	}
 
-	// Handle user messages (commands)
+	// 사용자 명령
 	if msg != nil && msg.Content != "" {
-		commandHandler.HandleCommand(msg.Content, ctx)
+		handleCommand(msg.Content, sim, btcHV.Value, ethHV.Value, ctx)
 	}
 
 	return watch.None(), nil
 }
 
-// cleanup is called when the Watcher stops
-func cleanup(
-	ctx watch.ManageContext,
-	stream *BinanceStream,
-	simulator *TradingSimulator,
-	statsCollector *StatsCollector,
-) {
-	fmt.Println("\n🔧 Cleanup started...")
+// --- helpers ---
 
-	// Close WebSocket
-	fmt.Println("   Closing WebSocket...")
-	stream.Close()
-
-	// Print final statistics
-	fmt.Println("\n📊 Final Statistics:")
-	statsCollector.PrintDetailedStats(stream, simulator)
-
-	fmt.Println("\n✅ Cleanup complete")
-}
-
-// handleUserInput reads user input and sends to Watcher
-func handleUserInput(w *watch.Watcher) {
-	scanner := bufio.NewScanner(os.Stdin)
-
-	for scanner.Scan() {
-		input := scanner.Text()
-		if input == "" {
-			continue
-		}
-
-		// Send command to Watcher
-		if err := w.SendMessage(input); err != nil {
-			fmt.Printf("⚠️  Failed to send command: %v\n", err)
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		fmt.Printf("⚠️  Input error: %v\n", err)
-	}
-}
-
-// flowValueStreamToFlowHandle adapts a FlowValue[T] stream function to a wm.GetFlowHandleFunc[T].
-// BinanceStream returns func(ctx) (<-chan FlowValue[T], error).
-// WatchFlow expects func(flowCtx) (chan UpdateFunc[T], error).
-func flowValueStreamToFlowHandle(
-	getStream func(ctx context.Context) (<-chan shared.FlowValue[float64], error),
-) wm.SetupUpdateFuncChan[float64] {
+// newBinancePriceFlow returns a SetupUpdateFuncChan that fully owns its BinanceStream.
+// Setup(1회): BinanceStream 생성 → Connect → 가격 채널 구독
+// FlowCtx.Done(): WebSocket 자동 Close
+func newBinancePriceFlow(symbol string) wm.SetupUpdateFuncChan[float64] {
 	return func(flowCtx wm.FlowContext) (chan wm.UpdateFunc[float64], error) {
+		stream := NewBinanceStream()
+		if err := stream.Connect(); err != nil {
+			return nil, fmt.Errorf("binance connect: %w", err)
+		}
+
+		go func() {
+			<-flowCtx.Done()
+			stream.Close()
+		}()
+
+		var getStream func(ctx context.Context) (<-chan shared.FlowValue[float64], error)
+		switch symbol {
+		case "BTC":
+			getStream = stream.GetBTCPriceStream()
+		case "ETH":
+			getStream = stream.GetETHPriceStream()
+		default:
+			stream.Close()
+			return nil, fmt.Errorf("unknown symbol: %s", symbol)
+		}
+
 		sourceCh, err := getStream(flowCtx)
 		if err != nil {
+			stream.Close()
 			return nil, err
 		}
 
 		updateCh := make(chan wm.UpdateFunc[float64], 100)
-
-		// Bridge: FlowValue → UpdateFunc
 		go func() {
 			defer close(updateCh)
 			for fv := range sourceCh {
-				val := fv // capture
-				fn := func(prev shared.WatchValue[float64]) (shared.WatchValue[float64], bool) {
+				val := fv
+				updateCh <- func(prev shared.WatchValue[float64]) (shared.WatchValue[float64], bool) {
 					if val.E != nil {
 						return shared.WatchValue[float64]{Error: val.E}, false
 					}
@@ -274,10 +179,51 @@ func flowValueStreamToFlowHandle(
 					}
 					return shared.WatchValue[float64]{Value: val.V}, false
 				}
-				updateCh <- fn
 			}
 		}()
 
 		return updateCh, nil
 	}
+}
+
+func handleCommand(cmd string, sim *TradingSimulator, btcPrice, ethPrice float64, ctx watch.ManageContext) {
+	cmd = strings.TrimSpace(strings.ToLower(cmd))
+	switch cmd {
+	case "status", "s":
+		p := sim.GetPortfolio()
+		watch.PrintWithLog(fmt.Sprintf(
+			"📊 BTC=$%.2f ETH=$%.2f | Portfolio: $%.2f (%.2f%%) | Trading: %v",
+			btcPrice, ethPrice, p.CurrentValue, p.ProfitLossPercent, !sim.IsPaused()), ctx)
+	case "portfolio", "p":
+		p := sim.GetPortfolio()
+		watch.PrintWithLog(fmt.Sprintf(
+			"💼 $%.2f (%.2f%%) | BTC: %.6f ETH: %.6f | Cash: $%.2f",
+			p.CurrentValue, p.ProfitLossPercent, p.BTCAmount, p.ETHAmount, p.CurrentUSD), ctx)
+	case "trades", "t":
+		trades := sim.GetTrades()
+		start := len(trades) - 10
+		if start < 0 {
+			start = 0
+		}
+		for _, t := range trades[start:] {
+			watch.PrintWithLog(fmt.Sprintf("   %s %s %s: %.6f @ $%.2f (%s)",
+				t.Time.Format("15:04:05"), t.Action, t.Symbol, t.Amount, t.Price, t.Reason), ctx)
+		}
+	case "pause":
+		sim.Pause()
+		watch.PrintWithLog("⏸️  Trading paused", ctx)
+	case "resume":
+		sim.Resume()
+		watch.PrintWithLog("▶️  Trading resumed", ctx)
+	case "help", "h", "?":
+		watch.PrintWithLog("Commands: status | portfolio | trades | pause | resume | help", ctx)
+	default:
+		watch.PrintWithLog(fmt.Sprintf("❌ Unknown: '%s' (type 'help')", cmd), ctx)
+	}
+}
+
+func cleanupReducer(ctx watch.ManageContext) {
+	fmt.Println("\n🔧 Cleanup...")
+	// Stream cleanup: WatchFlow의 FlowContext 종료가 자동 처리
+	fmt.Println("✅ Cleanup complete")
 }
