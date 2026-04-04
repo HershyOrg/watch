@@ -255,18 +255,27 @@ func (r *Reducer) reduceControlEvent(event *ControlEvent) (Effect, *shared.Trigg
 
 	switch event.Kind {
 	case StopRequested:
+		newTerminal := &shared.ControlStopped{Cause: shared.CauseUserStop}
 		if currentCS.IsTerminal() {
+			// terminal→terminal: 더 강하면 상태만 교체 (cleanup 이미 완료)
+			if shared.IsStrongerTerminal(currentCS, newTerminal) {
+				r.state.SetControlState(newTerminal)
+			}
 			return nil, nil
 		}
 		r.state.SetControlState(&shared.ControlStopDesired{})
-		return &CleanupEffect{ForState: &shared.ControlStopped{Cause: shared.CauseUserStop}}, &shared.TriggeredSignal{IsWatcherSig: true}
+		return &CleanupEffect{ForState: newTerminal}, &shared.TriggeredSignal{IsWatcherSig: true}
 
 	case KillRequested:
+		newTerminal := &shared.ControlKilled{Cause: shared.CauseUserKill}
 		if currentCS.IsTerminal() {
+			if shared.IsStrongerTerminal(currentCS, newTerminal) {
+				r.state.SetControlState(newTerminal)
+			}
 			return nil, nil
 		}
 		r.state.SetControlState(&shared.ControlKillDesired{})
-		return &CleanupEffect{ForState: &shared.ControlKilled{Cause: shared.CauseUserKill}}, &shared.TriggeredSignal{IsWatcherSig: true}
+		return &CleanupEffect{ForState: newTerminal}, &shared.TriggeredSignal{IsWatcherSig: true}
 
 	case RunRequested:
 		_, isIdle := currentCS.(*shared.ControlIdle)
@@ -320,9 +329,15 @@ func (r *Reducer) reduceDriven(event EffectDrivenEvent) Effect {
 		return nil
 
 	case *WmHealthCheckFailed:
-		if r.state.GetControlState().IsTerminal() {
+		currentCS := r.state.GetControlState()
+		if currentCS.IsTerminal() {
+			// terminal→terminal: 더 강하면 상태만 교체 (cleanup 이미 완료)
+			if shared.IsStrongerTerminal(currentCS, e.WorstState) {
+				r.state.SetControlState(e.WorstState)
+			}
 			return nil
 		}
+		r.state.SetControlState(&shared.ControlStopDesired{})
 		return &CleanupEffect{ForState: e.WorstState}
 
 	case *WmHealthCheckRecovered:

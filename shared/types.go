@@ -97,6 +97,68 @@ func GetTerminalCause(cs ControlState) TerminalCause {
 	}
 }
 
+// --- Terminal severity ---
+
+// CauseSeverity는 TerminalCause의 심각도를 반환한다.
+// 높을수록 강한(되돌리기 어려운) 원인.
+func CauseSeverity(c TerminalCause) int {
+	switch c {
+	case CauseHealthCheck:
+		return 1
+	case CauseRecoveryExhausted:
+		return 2
+	case CauseManagedFuncSignal:
+		return 3
+	case CauseUserStop:
+		return 4
+	case CauseUserKill:
+		return 5
+	case CauseReducerPanic:
+		return 6
+	default:
+		return 0
+	}
+}
+
+// TerminalStateSeverity는 terminal 상태의 심각도를 반환한다.
+// Non-terminal이면 0.
+func TerminalStateSeverity(cs ControlState) int {
+	switch cs.(type) {
+	case *ControlStopped:
+		return 1
+	case *ControlKilled:
+		return 2
+	case *ControlCrashed:
+		return 3
+	default:
+		return 0
+	}
+}
+
+// IsStrongerTerminal은 newState가 current보다 강한 terminal인지 판단한다.
+// 상태 심각도 우선 비교, 동일하면 Cause 심각도 비교.
+// 둘 다 terminal이어야 의미 있음. current가 non-terminal이면 항상 true.
+func IsStrongerTerminal(current, newState ControlState) bool {
+	curSev := TerminalStateSeverity(current)
+	newSev := TerminalStateSeverity(newState)
+
+	if curSev == 0 {
+		return true // current가 non-terminal이면 new가 항상 stronger
+	}
+	if newSev == 0 {
+		return false // new가 non-terminal이면 절대 stronger 아님
+	}
+
+	if newSev > curSev {
+		return true
+	}
+	if newSev < curSev {
+		return false
+	}
+	// 같은 상태 → Cause 심각도 비교
+	return CauseSeverity(GetTerminalCause(newState)) > CauseSeverity(GetTerminalCause(current))
+}
+
 // --- ControlSignal: ManagedFunc의 제어 의도 리턴 타입 ---
 
 // SignalKind represents the kind of control signal.

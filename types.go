@@ -21,9 +21,6 @@ type (
 	ControlSignal = shared.ControlSignal
 	SignalKind    = shared.SignalKind
 
-	// Error types
-	VarNotInitializedError = shared.VarNotInitializedError
-
 	// ControlState types (interface + structs)
 	ControlIdle           = shared.ControlIdle
 	ControlRunDesired     = shared.ControlRunDesired
@@ -70,7 +67,6 @@ var (
 	Kill  = shared.Kill
 	Crash = shared.Crash
 
-	NewVarNotInitializedErr = shared.NewVarNotInitializedErr
-	DefaultRecoveryPolicy   = shared.DefaultRecoveryPolicy
-	DefaultWatcherConfig    = shared.DefaultWatcherConfig
+	DefaultRecoveryPolicy = shared.DefaultRecoveryPolicy
+	DefaultWatcherConfig  = shared.DefaultWatcherConfig
 )

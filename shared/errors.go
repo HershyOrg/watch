@@ -2,21 +2,6 @@ package shared
 
 import "fmt"
 
-// VarNotInitializedError indicates a watched variable is not yet initialized.
-// This is expected during InitRun phase.
-type VarNotInitializedError struct {
-	VarName string
-}
-
-func (e *VarNotInitializedError) Error() string {
-	return fmt.Sprintf("variable not initialized: %s", e.VarName)
-}
-
-// NewVarNotInitializedErr creates a new VarNotInitializedError.
-func NewVarNotInitializedErr(varName string) *VarNotInitializedError {
-	return &VarNotInitializedError{VarName: varName}
-}
-
 // WatchInitPanic signals a critical panic during Watch initialization.
 // This should immediately transition to Crashed state without recovery attempts.
 type WatchInitPanic struct {
