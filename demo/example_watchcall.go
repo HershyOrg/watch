@@ -20,7 +20,7 @@ func main1() {
 	// Simulated external data source
 	externalCounter := 0
 
-	managedFunc := func(msg *watch.Message, ctx watch.ManageContext) error {
+	managedFunc := func(msg *watch.Message, ctx watch.ManageContext) (watch.ControlSignal, error) {
 		fmt.Printf("\n[Managed Function Execution]\n")
 
 		// WatchCall monitors external value and triggers re-execution on change
@@ -57,11 +57,11 @@ func main1() {
 			// Stop condition
 			if counter >= 5 {
 				fmt.Println("  ✅ Target reached, stopping...")
-				return watch.NewStopErr("reached target count")
+				return watch.Stop("reached target count"), nil
 			}
 		}
 
-		return nil
+		return watch.None(), nil
 	}
 
 	watcher.Manage(managedFunc, "watchCallExample", nil).Cleanup(func(ctx watch.ManageContext) {

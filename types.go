@@ -17,11 +17,11 @@ type (
 	WatcherConfig  = shared.WatcherConfig
 	RecoveryPolicy = shared.RecoveryPolicy
 
+	// Signal types
+	ControlSignal = shared.ControlSignal
+	SignalKind    = shared.SignalKind
+
 	// Error types
-	ControlError           = shared.ControlError
-	StopError              = shared.StopError
-	KillError              = shared.KillError
-	CrashError             = shared.CrashError
 	VarNotInitializedError = shared.VarNotInitializedError
 )
 
@@ -41,11 +41,21 @@ const (
 	PriorityVar     = shared.PriorityVar
 )
 
-// Re-export functions
+// Re-export ControlSignal constants
+const (
+	SignalNone  = shared.SignalNone
+	SignalStop  = shared.SignalStop
+	SignalKill  = shared.SignalKill
+	SignalCrash = shared.SignalCrash
+)
+
+// Re-export ControlSignal constructors and functions
 var (
-	NewStopErr              = shared.NewStopErr
-	NewKillErr              = shared.NewKillErr
-	NewCrashErr             = shared.NewCrashErr
+	None  = shared.None
+	Stop  = shared.Stop
+	Kill  = shared.Kill
+	Crash = shared.Crash
+
 	NewVarNotInitializedErr = shared.NewVarNotInitializedErr
 	DefaultRecoveryPolicy   = shared.DefaultRecoveryPolicy
 	DefaultWatcherConfig    = shared.DefaultWatcherConfig

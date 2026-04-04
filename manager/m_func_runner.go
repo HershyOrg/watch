@@ -11,8 +11,17 @@ import (
 )
 
 // ManagedFunc is the type of function that can be managed by the Watcher.
-// It receives a message and ManageContext, and returns an error for control flow.
-type ManagedFunc func(message *shared.Message, ctx shared.ManageContext) error
+// It receives a message and ManageContext, and returns a ControlSignal for control intent
+// and an error for actual failures. The two concerns are separated:
+//   - ControlSignal: 제어 의도 (Stop/Kill/Crash) + 이유
+//   - error: 순수 에러 (재시도 대상)
+type ManagedFunc func(message *shared.Message, ctx shared.ManageContext) (shared.ControlSignal, error)
+
+// runResult holds the result of a ManagedFunc execution.
+type runResult struct {
+	signal shared.ControlSignal
+	err    error
+}
 
 // Cleaner provides cleanup functionality for managed functions.
 type Cleaner interface {
@@ -208,14 +217,15 @@ func (t *MgrfuncRnner) executeRun(effect *RunEffect) (*EffectResult, EffectDrive
 	t.mu.RUnlock()
 
 	// Execute in goroutine with panic recovery
-	done := make(chan error, 1)
+	done := make(chan runResult, 1)
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				done <- fmt.Errorf("panic: %v", r)
+				done <- runResult{shared.None(), fmt.Errorf("panic: %v", r)}
 			}
 		}()
-		done <- fn(msg, t.manageCtx)
+		sig, err := fn(msg, t.manageCtx)
+		done <- runResult{sig, err}
 	}()
 
 	// Wait for completion or timeout
@@ -233,11 +243,11 @@ func (t *MgrfuncRnner) executeRun(effect *RunEffect) (*EffectResult, EffectDrive
 
 		drivenEvent = &ErrorSuppressed{}
 
-	case err := <-done:
-		if err != nil {
+	case res := <-done:
+		if !res.signal.IsNone() || res.err != nil {
 			result.Success = false
-			result.Error = err
-			drivenEvent = t.handleScriptError(err)
+			result.Error = res.err
+			drivenEvent = t.handleRunResult(res.signal, res.err)
 		} else {
 			result.Success = true
 			// MgrFuncRunnerState → Idle
@@ -251,9 +261,9 @@ func (t *MgrfuncRnner) executeRun(effect *RunEffect) (*EffectResult, EffectDrive
 	return result, drivenEvent
 }
 
-// handleScriptError processes errors from managed function execution.
-func (t *MgrfuncRnner) handleScriptError(err error) EffectDrivenEvent {
-	// Check for WatchInitPanic pattern - crash immediately
+// handleRunResult processes the ControlSignal and error from managed function execution.
+func (t *MgrfuncRnner) handleRunResult(signal shared.ControlSignal, err error) EffectDrivenEvent {
+	// Check for WatchInitPanic pattern - crash immediately (from panic recovery)
 	if err != nil {
 		errMsg := err.Error()
 		if strings.Contains(errMsg, "panic:") && strings.Contains(errMsg, "WatchInitPanic") {
@@ -264,19 +274,21 @@ func (t *MgrfuncRnner) handleScriptError(err error) EffectDrivenEvent {
 		}
 	}
 
-	switch err.(type) {
-	case *shared.KillError:
-		// KillError requires cleanup before transitioning to Killed
+	switch signal.Kind {
+	case shared.SignalKill:
 		_, cleanupEvent := t.executeCleanup(&CleanupEffect{ForState: shared.ControlKilled})
 		return cleanupEvent
 
-	case *shared.StopError:
-		// StopError requires cleanup before transitioning to Stopped
+	case shared.SignalStop:
 		_, cleanupEvent := t.executeCleanup(&CleanupEffect{ForState: shared.ControlStopped})
 		return cleanupEvent
 
+	case shared.SignalCrash:
+		_, cleanupEvent := t.executeCleanup(&CleanupEffect{ForState: shared.ControlCrashed})
+		return cleanupEvent
+
 	default:
-		// Count consecutive failures
+		// SignalNone + err != nil → regular error (retry logic)
 		consecutiveFails := t.countConsecutiveFailures()
 
 		if consecutiveFails < t.config.RecoveryPolicy.MinConsecutiveFailures {

@@ -61,6 +61,76 @@ func (s ControlState) IsTerminal() bool {
 	return s == ControlStopped || s == ControlKilled || s == ControlCrashed
 }
 
+// --- ControlSignal: ManagedFunc의 제어 의도 리턴 타입 ---
+
+// SignalKind represents the kind of control signal.
+type SignalKind uint8
+
+const (
+	// SignalNone indicates no control intent (success or regular error)
+	SignalNone SignalKind = iota
+	// SignalStop requests graceful stop
+	SignalStop
+	// SignalKill requests permanent termination
+	SignalKill
+	// SignalCrash indicates an irrecoverable error
+	SignalCrash
+)
+
+func (k SignalKind) String() string {
+	switch k {
+	case SignalNone:
+		return "None"
+	case SignalStop:
+		return "Stop"
+	case SignalKill:
+		return "Kill"
+	case SignalCrash:
+		return "Crash"
+	default:
+		return "Unknown"
+	}
+}
+
+// ControlSignal represents a control intent returned by ManagedFunc.
+// signal이 제어 의도 + 이유를, error가 순수 에러를 각각 담는다.
+type ControlSignal struct {
+	Kind   SignalKind
+	Reason string
+}
+
+func (s ControlSignal) String() string {
+	if s.Reason == "" {
+		return s.Kind.String()
+	}
+	return fmt.Sprintf("%s: %s", s.Kind, s.Reason)
+}
+
+// IsNone returns true if this signal has no control intent.
+func (s ControlSignal) IsNone() bool {
+	return s.Kind == SignalNone
+}
+
+// None creates a ControlSignal with no control intent.
+func None() ControlSignal {
+	return ControlSignal{Kind: SignalNone}
+}
+
+// Stop creates a ControlSignal requesting graceful stop.
+func Stop(reason string) ControlSignal {
+	return ControlSignal{Kind: SignalStop, Reason: reason}
+}
+
+// Kill creates a ControlSignal requesting permanent termination.
+func Kill(reason string) ControlSignal {
+	return ControlSignal{Kind: SignalKill, Reason: reason}
+}
+
+// Crash creates a ControlSignal indicating an irrecoverable error.
+func Crash(reason string) ControlSignal {
+	return ControlSignal{Kind: SignalCrash, Reason: reason}
+}
+
 // RunnerState represents the MgrFuncRunner's own actual execution state.
 type RunnerState uint8
 

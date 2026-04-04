@@ -32,7 +32,7 @@ type TradingState struct {
 }
 
 // Global trading function - uses Watcher environment variables
-func tradingFunc(msg *watch.Message, ctx watch.ManageContext) error {
+func tradingFunc(msg *watch.Message, ctx watch.ManageContext) (watch.ControlSignal, error) {
 	fmt.Println()
 	fmt.Println(strings.Repeat("=", 60))
 	fmt.Printf("[%s] Trading Cycle Started\n", time.Now().Format("15:04:05"))
@@ -185,7 +185,7 @@ func tradingFunc(msg *watch.Message, ctx watch.ManageContext) error {
 			fmt.Println("\n🛑 Stop signal received")
 			fmt.Printf("Final Position: $%.2f\n", state.Position)
 			fmt.Printf("Total Trades: %d\n", state.TotalTrades)
-			return watch.NewStopErr("user requested stop")
+			return watch.Stop("user requested stop"), nil
 
 		default:
 			fmt.Printf("❓ Unknown command: %s\n", msg.Content)
@@ -194,7 +194,7 @@ func tradingFunc(msg *watch.Message, ctx watch.ManageContext) error {
 
 	fmt.Println()
 	fmt.Println(strings.Repeat("-", 60))
-	return nil
+	return watch.None(), nil
 }
 
 // Global cleanup function

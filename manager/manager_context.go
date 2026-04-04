@@ -2,6 +2,7 @@
 package manager
 
 import (
+	"maps"
 	"context"
 	"sync"
 
@@ -151,9 +152,7 @@ func (mc *ManageContext) SetEnvVars(envVars map[string]string) {
 	// Deep copy for immutability
 	mc.envVarMap = make(map[string]string)
 	if envVars != nil {
-		for k, v := range envVars {
-			mc.envVarMap[k] = v
-		}
+		maps.Copy(mc.envVarMap, envVars)
 	}
 }
 

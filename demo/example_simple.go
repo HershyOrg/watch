@@ -18,7 +18,7 @@ func main2() {
 
 	// Managed function with reactive state
 	counter := 0
-	managedFunc := func(msg *watch.Message, ctx watch.ManageContext) error {
+	managedFunc := func(msg *watch.Message, ctx watch.ManageContext) (watch.ControlSignal, error) {
 		counter++
 		fmt.Printf("[Execution %d]\n", counter)
 
@@ -44,12 +44,12 @@ func main2() {
 			fmt.Printf("  Received message: '%s'\n", msg.Content)
 			if msg.Content == "stop" {
 				fmt.Println("  Stopping watcher gracefully...")
-				return watch.NewStopErr("user requested stop")
+				return watch.Stop("user requested stop"), nil
 			}
 		}
 
 		fmt.Println()
-		return nil
+		return watch.None(), nil
 	}
 
 	// Register managed function with cleanup (no envVars needed)

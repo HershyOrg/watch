@@ -102,7 +102,7 @@ func main() {
 	}
 
 	// Register managed function with closure and envVars
-	watcher.Manage(func(msg *watch.Message, ctx watch.ManageContext) error {
+	watcher.Manage(func(msg *watch.Message, ctx watch.ManageContext) (watch.ControlSignal, error) {
 		return mainReducer(
 			msg, ctx,
 			stream,
@@ -169,7 +169,7 @@ func mainReducer(
 	simulator *TradingSimulator,
 	statsCollector *StatsCollector,
 	commandHandler *CommandHandler,
-) error {
+) (watch.ControlSignal, error) {
 	// WatchFlow: BTC price (real-time from WebSocket)
 	btcHV := watch.WatchFlow[float64](0.0,
 		flowValueStreamToFlowHandle(stream.GetBTCPriceStream()),
@@ -235,7 +235,7 @@ func mainReducer(
 		commandHandler.HandleCommand(msg.Content, ctx)
 	}
 
-	return nil
+	return watch.None(), nil
 }
 
 // cleanup is called when the Watcher stops

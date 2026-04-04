@@ -55,7 +55,7 @@ func (w *Watcher) Manage(fn manager.ManagedFunc, name string, envVars map[string
 		panic("cannot call Manage after Watcher is already running")
 	}
 
-	wrappedFn := func(msg *Message, ctx ManageContext) error {
+	wrappedFn := func(msg *Message, ctx ManageContext) (shared.ControlSignal, error) {
 		return fn(msg, ctx)
 	}
 
