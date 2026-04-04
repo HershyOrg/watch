@@ -5,9 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/HershyOrg/watch"
@@ -56,22 +54,7 @@ func main() {
 		fmt.Printf("❌ Failed to connect: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("   ✅ Connected to wss://stream.binance.com:9443")
-
-	// Wait for initial prices
-	fmt.Println("\n⏳ Waiting for initial price data...")
-	for range 30 {
-		if stream.GetCurrentBTC() > 0 && stream.GetCurrentETH() > 0 {
-			fmt.Printf("   ✅ Initial prices received: BTC=$%.2f, ETH=$%.2f\n",
-				stream.GetCurrentBTC(), stream.GetCurrentETH())
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-
-	if stream.GetCurrentBTC() == 0 || stream.GetCurrentETH() == 0 {
-		fmt.Println("   ⚠️  Initial prices not received, continuing anyway...")
-	}
+	
 
 	// Create Watcher config
 	fmt.Println("\n🔍 Creating Hersh Watcher...")
@@ -87,13 +70,9 @@ func main() {
 		2 * time.Minute,
 	}
 
-	// Create context with 10-minute timeout for graceful shutdown
-	ctx, cancel := context.WithTimeout(context.Background(), TargetDuration)
-	defer cancel()
-
-	// Create Watcher with timeout context - it will auto-stop when context expires
+	// Create Watcher
 	watcher := watch.NewWatcher(config)
-	fmt.Println("   ✅ Watcher created with 10-minute timeout context")
+	fmt.Println("   ✅ Watcher created")
 
 	// Environment variables for managed function
 	envVars := map[string]string{
@@ -114,42 +93,30 @@ func main() {
 		cleanup(ctx, stream, simulator, statsCollector)
 	})
 
-	// Setup signal handling
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-
-	// Start Watcher
+	// Start Watcher and wait for completion
 	fmt.Println("\n▶️  Starting main trading loop...")
 	fmt.Println("   Type 'help' for available commands")
 	fmt.Println("   Press Ctrl+C to stop")
 	fmt.Println("   Watcher will auto-stop after 10 minutes")
 	fmt.Println()
 
-	if err := watcher.StartAndRun(); err != nil {
+	result, err := watcher.StartAndWait(
+		watch.WithTimeout(TargetDuration),
+		watch.WithInterrupt(),
+	)
+	if err != nil {
 		fmt.Printf("❌ Initialization failed: %v\n", err)
 		os.Exit(1)
 	}
-	// Wait for either context timeout or OS signal
-	select {
-	case <-ctx.Done():
-		// Context timeout - watcher will auto-stop via parent context
-		fmt.Println("\n\n⏰ Target duration reached (10 minutes)")
-		fmt.Println("   Watcher auto-stopping gracefully...")
-		// Brief pause to allow auto-stop to complete
-		time.Sleep(200 * time.Millisecond)
-	case <-sigChan:
-		// User interrupt
-		fmt.Println("\n\n🛑 Interrupt signal received...")
-		watcher.StopAll()
-	}
 
-	// Start user input handler (only if stdin is available)
-	go func() {
-		stat, _ := os.Stdin.Stat()
-		if (stat.Mode() & os.ModeCharDevice) != 0 {
-			handleUserInput(watcher)
-		}
-	}()
+	switch result.Reason {
+	case watch.WaitReasonTimeout:
+		fmt.Println("\n\n⏰ Target duration reached (10 minutes)")
+	case watch.WaitReasonSignal:
+		fmt.Println("\n\n🛑 Interrupt signal received, stopped gracefully")
+	default:
+		fmt.Printf("\n\nWatcher ended: %s (reason: %s)\n", result.State, result.Reason)
+	}
 
 	// Print logger summary
 	fmt.Println("\n" + strings.Repeat("═", 80))
