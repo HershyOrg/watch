@@ -37,7 +37,7 @@ func main() {
 	}
 
 	watcher := watch.NewWatcher(config)
-	watcher.Manage(mainReducer, "TradingSimulator", map[string]string{
+	watcher.Manage(delcaredLogic, "TradingSimulator", map[string]string{
 		"DEMO_NAME": DemoName, "DEMO_VERSION": DemoVersion,
 	}).Cleanup(cleanupReducer)
 
@@ -63,9 +63,7 @@ func main() {
 	watcher.GetLogger().PrintSummary()
 }
 
-// --- mainReducer ---
-
-func mainReducer(msg *watch.Message, ctx watch.ManageContext) (watch.ControlSignal, error) {
+func delcaredLogic(msg *watch.Message, ctx watch.ManageContext) (watch.ControlSignal, error) {
 	// WatchFlow: 실시간 가격 (Setup에서 WebSocket 생성+연결, FlowCtx 종료 시 자동 Close)
 	btcHV := watch.WatchFlow(0.0, newBinancePriceFlow("BTC"), "btc_price", ctx)
 	ethHV := watch.WatchFlow(0.0, newBinancePriceFlow("ETH"), "eth_price", ctx)
@@ -75,32 +73,32 @@ func mainReducer(msg *watch.Message, ctx watch.ManageContext) (watch.ControlSign
 	rebalanceTick := watch.WatchTick("rebalance_ticker", RebalanceInterval, ctx)
 
 	// TradingSimulator (Memo: 1회 생성, 캐시)
-	sim := watch.Memo(func() *TradingSimulator {
+	simulator := watch.Memo(func() *TradingSimulator {
 		return NewTradingSimulator(InitialCapital)
 	}, "sim", ctx)
 
 	// 가격 반영
 	if btcHV.IsUpdatedValide() {
-		sim.UpdatePrice("BTC", btcHV.Value)
+		simulator.UpdatePrice("BTC", btcHV.Value)
 	}
 	if ethHV.IsUpdatedValide() {
-		sim.UpdatePrice("ETH", ethHV.Value)
+		simulator.UpdatePrice("ETH", ethHV.Value)
 	}
 
 	// 주기적 리포트
 	if statsTick.IsTriggered(ctx) {
-		p := sim.GetPortfolio()
+		p := simulator.GetPortfolio()
 		watch.PrintWithLog(fmt.Sprintf(
 			"\n📊 [%s] BTC=$%.2f ETH=$%.2f | Portfolio: $%.2f (%.2f%%) | Trades: %d",
 			time.Now().Format("15:04:05"),
 			btcHV.Value, ethHV.Value,
 			p.CurrentValue, p.ProfitLossPercent,
-			len(sim.GetTrades())), ctx)
+			len(simulator.GetTrades())), ctx)
 	}
 
 	// 리밸런스
 	if rebalanceTick.IsTriggered(ctx) {
-		trades := sim.Rebalance()
+		trades := simulator.Rebalance()
 		for _, t := range trades {
 			watch.PrintWithLog(fmt.Sprintf("   ⏰ %s %s: %.6f @ $%.2f",
 				t.Action, t.Symbol, t.Amount, t.Price), ctx)
@@ -108,8 +106,8 @@ func mainReducer(msg *watch.Message, ctx watch.ManageContext) (watch.ControlSign
 	}
 
 	// 전략 실행
-	if !sim.IsPaused() {
-		trades := sim.ExecuteStrategy()
+	if !simulator.IsPaused() {
+		trades := simulator.ExecuteStrategy()
 		if len(trades) > 0 {
 			watch.PrintWithLog(fmt.Sprintf("\n💹 %d trades:", len(trades)), ctx)
 			for _, t := range trades {
@@ -117,7 +115,7 @@ func mainReducer(msg *watch.Message, ctx watch.ManageContext) (watch.ControlSign
 					t.Time.Format("15:04:05"),
 					t.Action, t.Symbol, t.Amount, t.Price, t.Reason), ctx)
 			}
-			p := sim.GetPortfolio()
+			p := simulator.GetPortfolio()
 			watch.PrintWithLog(fmt.Sprintf("   Portfolio: $%.2f (%.2f%%)",
 				p.CurrentValue, p.ProfitLossPercent), ctx)
 		}
@@ -125,7 +123,7 @@ func mainReducer(msg *watch.Message, ctx watch.ManageContext) (watch.ControlSign
 
 	// 사용자 명령
 	if msg != nil && msg.Content != "" {
-		handleCommand(msg.Content, sim, btcHV.Value, ethHV.Value, ctx)
+		handleCommand(msg.Content, simulator, btcHV.Value, ethHV.Value, ctx)
 	}
 
 	return watch.None(), nil
