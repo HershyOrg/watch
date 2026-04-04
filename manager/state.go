@@ -95,12 +95,17 @@ func (ms *ManagerState) SetControlState(state shared.ControlState) {
 type StateSnapshot struct {
 	VarState     map[string]shared.RawWatchValue
 	ControlState shared.ControlState
+	// TerminalCause is extracted from ControlState for convenience.
+	// Empty string if non-terminal.
+	TerminalCause shared.TerminalCause
 }
 
 // Snapshot creates a snapshot of all state.
 func (ms *ManagerState) Snapshot() StateSnapshot {
+	cs := ms.GetControlState()
 	return StateSnapshot{
-		VarState:     ms.VarState.GetAll(),
-		ControlState: ms.GetControlState(),
+		VarState:      ms.VarState.GetAll(),
+		ControlState:  cs,
+		TerminalCause: shared.GetTerminalCause(cs),
 	}
 }

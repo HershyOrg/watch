@@ -149,3 +149,30 @@ type DirectCrashed struct{}
 
 func (e *DirectCrashed) isEffectDrivenEvent() {}
 func (e *DirectCrashed) String() string       { return "DirectCrashed" }
+
+// --- Health Check Events ---
+
+// WmHealthStatus는 건강하지 않은 WM의 상태 정보.
+type WmHealthStatus struct {
+	VarName       string
+	LoopStateName string
+}
+
+// WmHealthCheckFailed는 하나 이상의 WM이 건강하지 않음을 나타냄.
+// WorstState는 매핑된 최악의 Manager terminal 상태 (Cause=CauseHealthCheck 포함).
+type WmHealthCheckFailed struct {
+	UnhealthyWms []WmHealthStatus
+	WorstState   shared.ControlState
+}
+
+func (e *WmHealthCheckFailed) isEffectDrivenEvent() {}
+func (e *WmHealthCheckFailed) String() string {
+	return fmt.Sprintf("WmHealthCheckFailed{count=%d, worst=%s}", len(e.UnhealthyWms), e.WorstState)
+}
+
+// WmHealthCheckRecovered는 모든 WM이 건강해졌음을 나타냄.
+// TerminalCause==CauseHealthCheck인 terminal 상태에서만 발생.
+type WmHealthCheckRecovered struct{}
+
+func (e *WmHealthCheckRecovered) isEffectDrivenEvent() {}
+func (e *WmHealthCheckRecovered) String() string       { return "WmHealthCheckRecovered" }

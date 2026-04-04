@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"time"
 
 	"github.com/HershyOrg/watch/shared"
+	"github.com/HershyOrg/watch/wm"
 )
 
 // ReduceAction represents a state transition that occurred.
@@ -48,7 +50,7 @@ func (r *Reducer) Run(ctx context.Context, runner *MgrfuncRnner) (err error) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			err = fmt.Errorf("reducer panic: %v", rec)
-			r.state.SetControlState(shared.ControlCrashed)
+			r.state.SetControlState(&shared.ControlCrashed{Cause: shared.CauseReducerPanic})
 
 			fmt.Printf("[Reducer] PANIC RECOVERED: %v\n", rec)
 			fmt.Printf("[Reducer] Stack trace:\n")
@@ -58,12 +60,21 @@ func (r *Reducer) Run(ctx context.Context, runner *MgrfuncRnner) (err error) {
 		}
 	}()
 
+	var tickCh <-chan time.Time
+	if r.manager != nil && r.manager.config != nil && r.manager.config.HealthCheckInterval > 0 {
+		ticker := time.NewTicker(r.manager.config.HealthCheckInterval)
+		defer ticker.Stop()
+		tickCh = ticker.C
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-r.signals.NewSigAppended:
 			r.processAvailableEvents(ctx, runner)
+		case <-tickCh:
+			r.checkWmHealth(runner)
 		}
 	}
 }
@@ -128,7 +139,7 @@ func (r *Reducer) tryProcessNextEvent(runner *MgrfuncRnner) bool {
 	}
 
 	// Priority 2: Var (Marker 기반)
-	if r.canProcessVarEvent(cs) {
+	if r.canProcessVarEvent() {
 		// Drain: NewSigAppended 잔여 알림 소비
 		r.drainNewSigAppended()
 
@@ -136,7 +147,7 @@ func (r *Reducer) tryProcessNextEvent(runner *MgrfuncRnner) bool {
 		updates := r.readLatestFromAllWMs()
 		if len(updates) > 0 {
 			r.state.VarState.BatchSet(updates)
-			r.state.SetControlState(shared.ControlRunDesired)
+			r.state.SetControlState(&shared.ControlRunDesired{})
 
 			varNames := make([]string, 0, len(updates))
 			for v := range updates {
@@ -232,7 +243,7 @@ func (r *Reducer) reduceSemantic(event ManagerSemanticEvent) (Effect, *shared.Tr
 
 // reduceUserEvent handles UserMessageReceived.
 func (r *Reducer) reduceUserEvent(event *UserMessageReceived) (Effect, *shared.TriggeredSignal) {
-	r.state.SetControlState(shared.ControlRunDesired)
+	r.state.SetControlState(&shared.ControlRunDesired{})
 
 	triggeredSig := &shared.TriggeredSignal{IsUserSig: true}
 	return &RunEffect{TriggeredSignal: triggeredSig, Message: event.UserMessage}, triggeredSig
@@ -247,21 +258,22 @@ func (r *Reducer) reduceControlEvent(event *ControlEvent) (Effect, *shared.Trigg
 		if currentCS.IsTerminal() {
 			return nil, nil
 		}
-		r.state.SetControlState(shared.ControlStopDesired)
-		return &CleanupEffect{ForState: shared.ControlStopped}, &shared.TriggeredSignal{IsWatcherSig: true}
+		r.state.SetControlState(&shared.ControlStopDesired{})
+		return &CleanupEffect{ForState: &shared.ControlStopped{Cause: shared.CauseUserStop}}, &shared.TriggeredSignal{IsWatcherSig: true}
 
 	case KillRequested:
 		if currentCS.IsTerminal() {
 			return nil, nil
 		}
-		r.state.SetControlState(shared.ControlKillDesired)
-		return &CleanupEffect{ForState: shared.ControlKilled}, &shared.TriggeredSignal{IsWatcherSig: true}
+		r.state.SetControlState(&shared.ControlKillDesired{})
+		return &CleanupEffect{ForState: &shared.ControlKilled{Cause: shared.CauseUserKill}}, &shared.TriggeredSignal{IsWatcherSig: true}
 
 	case RunRequested:
-		if !currentCS.IsTerminal() && currentCS != shared.ControlIdle {
+		_, isIdle := currentCS.(*shared.ControlIdle)
+		if !currentCS.IsTerminal() && !isIdle {
 			return nil, nil
 		}
-		r.state.SetControlState(shared.ControlRunDesired)
+		r.state.SetControlState(&shared.ControlRunDesired{})
 		triggeredSig := &shared.TriggeredSignal{IsWatcherSig: true}
 		return &RunEffect{
 			NeedInit:        event.NeedInit,
@@ -276,15 +288,15 @@ func (r *Reducer) reduceControlEvent(event *ControlEvent) (Effect, *shared.Trigg
 func (r *Reducer) reduceDriven(event EffectDrivenEvent) Effect {
 	switch e := event.(type) {
 	case *ExecutionCompleted:
-		r.state.SetControlState(shared.ControlIdle)
+		r.state.SetControlState(&shared.ControlIdle{})
 		return nil
 
 	case *ErrorSuppressed:
-		r.state.SetControlState(shared.ControlIdle)
+		r.state.SetControlState(&shared.ControlIdle{})
 		return nil
 
 	case *ExecutionFailed:
-		r.state.SetControlState(shared.ControlRecoverDesired)
+		r.state.SetControlState(&shared.ControlRecoverDesired{})
 		return &RecoverEffect{}
 
 	case *CleanupCompleted:
@@ -292,20 +304,30 @@ func (r *Reducer) reduceDriven(event EffectDrivenEvent) Effect {
 		return nil
 
 	case *RecoveryReady:
-		r.state.SetControlState(shared.ControlRunDesired)
+		r.state.SetControlState(&shared.ControlRunDesired{})
 		return &RunEffect{TriggeredSignal: &shared.TriggeredSignal{IsWatcherSig: true}, NeedInit: true}
 
 	case *RecoveryExhausted:
-		r.state.SetControlState(shared.ControlCrashed)
+		r.state.SetControlState(&shared.ControlCrashed{Cause: shared.CauseRecoveryExhausted})
 		return nil
 
 	case *DirectKilled:
-		r.state.SetControlState(shared.ControlKilled)
+		r.state.SetControlState(&shared.ControlKilled{Cause: shared.CauseManagedFuncSignal})
 		return nil
 
 	case *DirectCrashed:
-		r.state.SetControlState(shared.ControlCrashed)
+		r.state.SetControlState(&shared.ControlCrashed{Cause: shared.CauseManagedFuncSignal})
 		return nil
+
+	case *WmHealthCheckFailed:
+		if r.state.GetControlState().IsTerminal() {
+			return nil
+		}
+		return &CleanupEffect{ForState: e.WorstState}
+
+	case *WmHealthCheckRecovered:
+		r.state.SetControlState(&shared.ControlRunDesired{})
+		return &RunEffect{NeedInit: true, TriggeredSignal: &shared.TriggeredSignal{IsWatcherSig: true}}
 	}
 
 	return nil
@@ -323,12 +345,14 @@ func (r *Reducer) ReduceDriven(event EffectDrivenEvent) Effect {
 
 // canProcessUserEvent checks if current state can process UserEvent.
 func (r *Reducer) canProcessUserEvent(cs shared.ControlState) bool {
-	return cs == shared.ControlIdle
+	_, ok := cs.(*shared.ControlIdle)
+	return ok
 }
 
 // canProcessVarEvent checks if current state can process VarSig.
-func (r *Reducer) canProcessVarEvent(cs shared.ControlState) bool {
-	return cs == shared.ControlIdle
+func (r *Reducer) canProcessVarEvent() bool {
+	_, ok := r.state.GetControlState().(*shared.ControlIdle)
+	return ok
 }
 
 // drainNewSigAppended consumes all remaining NewSigAppended notifications.
@@ -369,4 +393,72 @@ func (r *Reducer) readLatestFromAllWMs() map[string]shared.RawWatchValue {
 		return nil
 	}
 	return updates
+}
+
+// --- Health Check ---
+
+// checkWmHealth checks all WMs' LoopState and triggers terminal transition or recovery.
+func (r *Reducer) checkWmHealth(runner *MgrfuncRnner) {
+	if r.manager == nil {
+		return
+	}
+	registry := r.manager.GetMachineRegistry()
+	if registry == nil {
+		return
+	}
+	machines := registry.GetAllWatchMachines()
+	if len(machines) == 0 {
+		return
+	}
+
+	var unhealthy []WmHealthStatus
+	var worstState shared.ControlState
+	worstSeverity := 0
+
+	for _, machine := range machines {
+		mapped, severity := mapWmLoopStateToControlState(machine.GetLoopState())
+		if severity > 0 {
+			unhealthy = append(unhealthy, WmHealthStatus{
+				VarName:       machine.VarName,
+				LoopStateName: fmt.Sprintf("%T", machine.GetLoopState()),
+			})
+			if severity > worstSeverity {
+				worstSeverity = severity
+				worstState = mapped
+			}
+		}
+	}
+
+	cs := r.state.GetControlState()
+
+	if len(unhealthy) > 0 && !cs.IsTerminal() {
+		// 나쁜 WM 발견 + Manager 아직 non-terminal → terminal 전이
+		r.reduceEffectDrivenEvent(&WmHealthCheckFailed{
+			UnhealthyWms: unhealthy,
+			WorstState:   worstState,
+		}, runner)
+		return
+	}
+
+	if len(unhealthy) == 0 && cs.IsTerminal() {
+		// 모든 WM 건강 + Manager terminal → CauseHealthCheck인 경우만 자동 복구
+		if shared.GetTerminalCause(cs) == shared.CauseHealthCheck {
+			r.reduceEffectDrivenEvent(&WmHealthCheckRecovered{}, runner)
+		}
+	}
+}
+
+// mapWmLoopStateToControlState maps a WM LoopState to the corresponding Manager ControlState.
+// Returns (nil, 0) for healthy states.
+func mapWmLoopStateToControlState(ls wm.LoopState) (shared.ControlState, int) {
+	switch ls.(type) {
+	case *wm.LoopStopped:
+		return &shared.ControlStopped{Cause: shared.CauseHealthCheck}, 1
+	case *wm.LoopKilled:
+		return &shared.ControlKilled{Cause: shared.CauseHealthCheck}, 2
+	case *wm.LoopCrashed:
+		return &shared.ControlCrashed{Cause: shared.CauseHealthCheck}, 3
+	default:
+		return nil, 0
+	}
 }

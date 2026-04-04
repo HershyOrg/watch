@@ -23,10 +23,8 @@ type (
 
 	// Error types
 	VarNotInitializedError = shared.VarNotInitializedError
-)
 
-// Re-export ControlState constants
-const (
+	// ControlState types (interface + structs)
 	ControlIdle           = shared.ControlIdle
 	ControlRunDesired     = shared.ControlRunDesired
 	ControlStopDesired    = shared.ControlStopDesired
@@ -36,6 +34,22 @@ const (
 	ControlKilled         = shared.ControlKilled
 	ControlCrashed        = shared.ControlCrashed
 
+	// TerminalCause
+	TerminalCause = shared.TerminalCause
+)
+
+// Re-export TerminalCause constants
+const (
+	CauseHealthCheck       = shared.CauseHealthCheck
+	CauseUserStop          = shared.CauseUserStop
+	CauseUserKill          = shared.CauseUserKill
+	CauseRecoveryExhausted = shared.CauseRecoveryExhausted
+	CauseManagedFuncSignal = shared.CauseManagedFuncSignal
+	CauseReducerPanic      = shared.CauseReducerPanic
+)
+
+// Re-export SignalPriority constants
+const (
 	PriorityControl = shared.PriorityControl
 	PriorityUser    = shared.PriorityUser
 	PriorityVar     = shared.PriorityVar

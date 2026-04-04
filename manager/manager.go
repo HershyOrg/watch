@@ -41,7 +41,7 @@ func NewManager(
 ) *Manager {
 	logger := NewLogger(config.MaxLogEntries)
 
-	state := NewManagerState(shared.ControlIdle)
+	state := NewManagerState(&shared.ControlIdle{})
 	signals := NewSignalChannels(config.SignalChanCapacity)
 
 	runner := NewRunner(

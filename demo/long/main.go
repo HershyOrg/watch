@@ -171,11 +171,11 @@ func mainReducer(
 	commandHandler *CommandHandler,
 ) (watch.ControlSignal, error) {
 	// WatchFlow: BTC price (real-time from WebSocket)
-	btcHV := watch.WatchFlow[float64](0.0,
+	btcHV := watch.WatchFlow(0.0,
 		flowValueStreamToFlowHandle(stream.GetBTCPriceStream()),
 		"btc_price", ctx)
 	// WatchFlow: ETH price (real-time from WebSocket)
-	ethHV := watch.WatchFlow[float64](0.0,
+	ethHV := watch.WatchFlow(0.0,
 		flowValueStreamToFlowHandle(stream.GetETHPriceStream()),
 		"eth_price", ctx)
 

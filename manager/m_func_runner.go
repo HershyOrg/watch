@@ -276,15 +276,15 @@ func (t *MgrfuncRnner) handleRunResult(signal shared.ControlSignal, err error) E
 
 	switch signal.Kind {
 	case shared.SignalKill:
-		_, cleanupEvent := t.executeCleanup(&CleanupEffect{ForState: shared.ControlKilled})
+		_, cleanupEvent := t.executeCleanup(&CleanupEffect{ForState: &shared.ControlKilled{Cause: shared.CauseManagedFuncSignal}})
 		return cleanupEvent
 
 	case shared.SignalStop:
-		_, cleanupEvent := t.executeCleanup(&CleanupEffect{ForState: shared.ControlStopped})
+		_, cleanupEvent := t.executeCleanup(&CleanupEffect{ForState: &shared.ControlStopped{Cause: shared.CauseManagedFuncSignal}})
 		return cleanupEvent
 
 	case shared.SignalCrash:
-		_, cleanupEvent := t.executeCleanup(&CleanupEffect{ForState: shared.ControlCrashed})
+		_, cleanupEvent := t.executeCleanup(&CleanupEffect{ForState: &shared.ControlCrashed{Cause: shared.CauseManagedFuncSignal}})
 		return cleanupEvent
 
 	default:
@@ -355,12 +355,12 @@ func (t *MgrfuncRnner) executeCleanup(effect *CleanupEffect) (*EffectResult, Eff
 
 	// Update MgrFuncRunnerState based on ForState
 	t.mu.Lock()
-	switch effect.ForState {
-	case shared.ControlStopped:
+	switch effect.ForState.(type) {
+	case *shared.ControlStopped:
 		t.state = shared.RunnerStopped
-	case shared.ControlKilled:
+	case *shared.ControlKilled:
 		t.state = shared.RunnerKilled
-	case shared.ControlCrashed:
+	case *shared.ControlCrashed:
 		t.state = shared.RunnerCrashed
 	default:
 		t.state = shared.RunnerStopped

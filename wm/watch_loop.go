@@ -55,11 +55,11 @@ func NewWatchLoop(
 // Execute는 Reducer가 생성한 LoopEffect를 받아 실행하고,
 // 그 결과를 LoopEffectDrivenEvent로 반환함.
 func (wl *WatchLoop) Execute(effect LoopEffect) LoopEffectDrivenEvent {
-	switch e := effect.(type) {
+	switch effect.(type) {
 	case *StartLoop:
 		return wl.executeStart()
 	case *TryRecoverLoop:
-		return wl.executeTryRecover(e)
+		return wl.executeTryRecover()
 	case *StopLoop:
 		return wl.executeStop()
 	case *KillLoop:
@@ -278,7 +278,7 @@ func (wl *WatchLoop) safeGetFlowHandle() (handle RawFlowHandle, err error) {
 
 // --- Recovery ---
 
-func (wl *WatchLoop) executeTryRecover(effect *TryRecoverLoop) LoopEffectDrivenEvent {
+func (wl *WatchLoop) executeTryRecover() LoopEffectDrivenEvent {
 	// sleep 전에 반드시 Loop 중지 — 어떤 경로에서든
 	// History 누적 방지
 	if wl.rootCancel != nil {

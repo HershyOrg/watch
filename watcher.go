@@ -191,10 +191,10 @@ func (w *Watcher) RunMgr() error {
 	if currentState.IsTerminal() {
 		// 재실행: RequestRun(needInit=true) + Idle 상태 대기
 		w.manager.RequestRun("run requested", true)
-		return w.waitForState(ControlIdle, 60*time.Second)
+		return w.waitForStateType(&ControlIdle{}, 60*time.Second)
 	}
 
-	if currentState == ControlIdle {
+	if _, ok := currentState.(*ControlIdle); ok {
 		// 초기 실행
 		w.manager.RequestRun("watcher started", true)
 		return nil
@@ -315,8 +315,10 @@ func (w *Watcher) IsRunning() bool {
 
 // --- private helpers ---
 
-// waitForState waits for Manager to reach the target ControlState.
-func (w *Watcher) waitForState(targetState ControlState, timeout time.Duration) error {
+// waitForStateType waits for Manager to reach a ControlState matching the target type.
+// Comparison is by type (not value equality) since ControlState is an interface.
+func (w *Watcher) waitForStateType(targetState ControlState, timeout time.Duration) error {
+	targetType := fmt.Sprintf("%T", targetState)
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	deadline := time.After(timeout)
@@ -325,14 +327,18 @@ func (w *Watcher) waitForState(targetState ControlState, timeout time.Duration) 
 		select {
 		case <-ticker.C:
 			currentState := w.manager.GetControlState()
-			if currentState == targetState {
+			if fmt.Sprintf("%T", currentState) == targetType {
 				return nil
 			}
-			if targetState != ControlCrashed && currentState == ControlCrashed {
-				return fmt.Errorf("manager crashed while waiting for state %s", targetState)
+			if _, ok := currentState.(*ControlCrashed); ok {
+				if _, targetIsCrashed := targetState.(*ControlCrashed); !targetIsCrashed {
+					return fmt.Errorf("manager crashed while waiting for state %s", targetState)
+				}
 			}
-			if targetState != ControlKilled && currentState == ControlKilled {
-				return fmt.Errorf("manager killed while waiting for state %s", targetState)
+			if _, ok := currentState.(*ControlKilled); ok {
+				if _, targetIsKilled := targetState.(*ControlKilled); !targetIsKilled {
+					return fmt.Errorf("manager killed while waiting for state %s", targetState)
+				}
 			}
 		case <-deadline:
 			currentState := w.manager.GetControlState()

@@ -9,56 +9,92 @@ import (
 
 // ControlState represents the Manager's control intent over the MgrFuncRunner.
 // SemanticEvent → Desired state → recursive Effect loop → Terminal state.
-type ControlState uint8
-
-const (
-	// ControlIdle indicates the Manager is idle and ready to accept events
-	ControlIdle ControlState = iota
-	// ControlRunDesired indicates execution is requested (UserMsg/VarChange)
-	ControlRunDesired
-	// ControlStopDesired indicates stop is requested
-	ControlStopDesired
-	// ControlKillDesired indicates kill is requested
-	ControlKillDesired
-	// ControlRecoverDesired indicates recovery is requested
-	ControlRecoverDesired
-
-	// Terminal states (settled after recursive loop completes)
-
-	// ControlStopped indicates the MgrFuncRunner has stopped
-	ControlStopped
-	// ControlKilled indicates the MgrFuncRunner has been killed
-	ControlKilled
-	// ControlCrashed indicates the MgrFuncRunner has crashed
-	ControlCrashed
-)
-
-func (s ControlState) String() string {
-	switch s {
-	case ControlIdle:
-		return "Idle"
-	case ControlRunDesired:
-		return "RunDesired"
-	case ControlStopDesired:
-		return "StopDesired"
-	case ControlKillDesired:
-		return "KillDesired"
-	case ControlRecoverDesired:
-		return "RecoverDesired"
-	case ControlStopped:
-		return "Stopped"
-	case ControlKilled:
-		return "Killed"
-	case ControlCrashed:
-		return "Crashed"
-	default:
-		return "Unknown"
-	}
+// LoopState 패턴과 동일하게 인터페이스로 정의.
+// Terminal 상태는 TerminalCause를 포함하여 "왜 terminal인가"를 기록한다.
+type ControlState interface {
+	controlState() // marker
+	IsTerminal() bool
+	String() string
 }
 
-// IsTerminal returns true if this is a terminal state.
-func (s ControlState) IsTerminal() bool {
-	return s == ControlStopped || s == ControlKilled || s == ControlCrashed
+// --- TerminalCause: terminal 전이의 근거 ---
+
+type TerminalCause string
+
+const (
+	CauseHealthCheck       TerminalCause = "HealthCheck"
+	CauseUserStop          TerminalCause = "UserStop"
+	CauseUserKill          TerminalCause = "UserKill"
+	CauseRecoveryExhausted TerminalCause = "RecoveryExhausted"
+	CauseManagedFuncSignal TerminalCause = "ManagedFuncSignal"
+	CauseReducerPanic      TerminalCause = "ReducerPanic"
+)
+
+// --- Non-terminal states ---
+
+type ControlIdle struct{}
+
+func (s *ControlIdle) controlState()    {}
+func (s *ControlIdle) IsTerminal() bool { return false }
+func (s *ControlIdle) String() string   { return "Idle" }
+
+type ControlRunDesired struct{}
+
+func (s *ControlRunDesired) controlState()    {}
+func (s *ControlRunDesired) IsTerminal() bool { return false }
+func (s *ControlRunDesired) String() string   { return "RunDesired" }
+
+type ControlStopDesired struct{}
+
+func (s *ControlStopDesired) controlState()    {}
+func (s *ControlStopDesired) IsTerminal() bool { return false }
+func (s *ControlStopDesired) String() string   { return "StopDesired" }
+
+type ControlKillDesired struct{}
+
+func (s *ControlKillDesired) controlState()    {}
+func (s *ControlKillDesired) IsTerminal() bool { return false }
+func (s *ControlKillDesired) String() string   { return "KillDesired" }
+
+type ControlRecoverDesired struct{}
+
+func (s *ControlRecoverDesired) controlState()    {}
+func (s *ControlRecoverDesired) IsTerminal() bool { return false }
+func (s *ControlRecoverDesired) String() string   { return "RecoverDesired" }
+
+// --- Terminal states (Cause 포함) ---
+
+type ControlStopped struct{ Cause TerminalCause }
+
+func (s *ControlStopped) controlState()    {}
+func (s *ControlStopped) IsTerminal() bool { return true }
+func (s *ControlStopped) String() string   { return fmt.Sprintf("Stopped(%s)", s.Cause) }
+
+type ControlKilled struct{ Cause TerminalCause }
+
+func (s *ControlKilled) controlState()    {}
+func (s *ControlKilled) IsTerminal() bool { return true }
+func (s *ControlKilled) String() string   { return fmt.Sprintf("Killed(%s)", s.Cause) }
+
+type ControlCrashed struct{ Cause TerminalCause }
+
+func (s *ControlCrashed) controlState()    {}
+func (s *ControlCrashed) IsTerminal() bool { return true }
+func (s *ControlCrashed) String() string   { return fmt.Sprintf("Crashed(%s)", s.Cause) }
+
+// GetTerminalCause는 ControlState가 terminal일 때 Cause를 추출한다.
+// Non-terminal이면 빈 문자열을 반환한다.
+func GetTerminalCause(cs ControlState) TerminalCause {
+	switch s := cs.(type) {
+	case *ControlStopped:
+		return s.Cause
+	case *ControlKilled:
+		return s.Cause
+	case *ControlCrashed:
+		return s.Cause
+	default:
+		return ""
+	}
 }
 
 // --- ControlSignal: ManagedFunc의 제어 의도 리턴 타입 ---
@@ -305,6 +341,11 @@ type WatcherConfig struct {
 	// RecoveryPolicy defines how the Watcher handles failures
 	RecoveryPolicy RecoveryPolicy
 
+	// HealthCheckInterval is the interval for checking WatchMachine health.
+	// If any WM is in a terminal/stopped state, Manager transitions to terminal.
+	// 0 disables health check. Default: 3 seconds.
+	HealthCheckInterval time.Duration
+
 	// Resource limit settings for long-running stability
 	MaxLogEntries      int // Maximum log entries before circular buffer truncation (default: 50,000)
 	MaxMemoEntries     int // Maximum number of memo cache entries (default: 1,000)
@@ -524,11 +565,12 @@ func (tv TickValue) IsInitial() bool {
 // DefaultWatcherConfig returns default configuration.
 func DefaultWatcherConfig() WatcherConfig {
 	return WatcherConfig{
-		ServerPort:         8080,
-		DefaultTimeout:     1 * time.Minute,
-		RecoveryPolicy:     DefaultRecoveryPolicy(),
-		MaxLogEntries:      50_000,
-		MaxMemoEntries:     1_000,
-		SignalChanCapacity: 50_000,
+		ServerPort:          8080,
+		DefaultTimeout:      1 * time.Minute,
+		RecoveryPolicy:      DefaultRecoveryPolicy(),
+		HealthCheckInterval: 3 * time.Second,
+		MaxLogEntries:       50_000,
+		MaxMemoEntries:      1_000,
+		SignalChanCapacity:  50_000,
 	}
 }
