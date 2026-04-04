@@ -54,9 +54,6 @@ type WatchMachine struct {
 	//Wathcer가 모든 등록된 WatchMachine을 한 곳에서 조회 가능하게 한다.
 	MachineRegistry MachineRegistry
 
-	//GcChecker를 통해 WatchMachine의 구독자들을 체크하고,
-	//구독자들이 다 멈췄다면, 쓸모없어신 자신도 멈춤.
-	GcChecker GcCheckerInterface
 	//PublishersChecker를 통해 자신을 Export한 Manager가 죽었는지 체크함.
 	PublishersChecker PublishersCheckerInterface
 
