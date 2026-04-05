@@ -362,15 +362,18 @@ type ManageContext interface {
 	// SetValue stores a value in the context by key
 	// This allows managed functions to maintain state across executions
 	// The framework automatically tracks changes for monitoring
+	// Frozen keys (injected via SetFrozenValues) cannot be overwritten
 	SetValue(key string, value any)
-
-	SetEnvVars(map[string]string)
 
 	// UpdateValue provides a safe way to update context values
 	// The updateFn receives a copy of the current value and returns the new value
 	// This ensures immutability and proper change tracking
+	// Frozen keys are protected and return current value without modification
 	// Returns the new value after update
 	UpdateValue(key string, updateFn func(current any) any) any
+
+	// SetFrozenValues injects immutable values into the store (init only)
+	SetFrozenValues(map[string]any)
 
 	// GetWatcher returns the watcher reference
 	// Returns any to avoid circular dependency with hersh package
@@ -379,11 +382,6 @@ type ManageContext interface {
 	// GetMachineRegistry returns the MachineRegistry for WatchXXX functions.
 	// Returns any to avoid circular dependency (실제로는 wm.MachineRegistry).
 	GetMachineRegistry() any
-
-	// GetEnv returns the environment variable value for the given key
-	// The second return value (ok) is true if the key exists, false otherwise
-	// Environment variables are immutable after Watcher initialization
-	GetEnv(key string) (string, bool)
 }
 
 // WatcherConfig holds configuration for creating a new Watcher.
@@ -528,8 +526,8 @@ func (wv WatchValue[T]) IsUpdated() bool {
 	return !wv.NotUpdated
 }
 
-// IsUpdatedValide returns true if !IsError && IsUpdated
-func (wv WatchValue[T]) IsUpdatedValide() bool {
+// IsUpdatedValid returns true if !IsError && IsUpdated
+func (wv WatchValue[T]) IsUpdatedValid() bool {
 	return !wv.IsError() && !wv.NotUpdated
 }
 

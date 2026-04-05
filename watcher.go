@@ -50,7 +50,7 @@ func NewWatcher(config WatcherConfig) *Watcher {
 }
 
 // Manage registers a function to be managed by the Watcher.
-func (w *Watcher) Manage(fn manager.ManagedFunc, name string, envVars map[string]string) *manager.CleanupBuilder {
+func (w *Watcher) Manage(fn manager.ManagedFunc, name string, envVars map[string]any) *manager.CleanupBuilder {
 	if w.isRunning.Load() {
 		panic("cannot call Manage after Watcher is already running")
 	}

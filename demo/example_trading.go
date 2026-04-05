@@ -39,10 +39,10 @@ func tradingFunc(msg *watch.Message, ctx watch.ManageContext) (watch.ControlSign
 	fmt.Println(strings.Repeat("=", 60))
 
 	// Load configuration from environment variables
-	apiKey, _ := ctx.GetEnv("API_KEY")
-	buyThresholdStr, _ := ctx.GetEnv("BUY_THRESHOLD")
-	sellThresholdStr, _ := ctx.GetEnv("SELL_THRESHOLD")
-	maxPositionStr, _ := ctx.GetEnv("MAX_POSITION")
+	apiKey, _ := ctx.GetValue("API_KEY").(string)
+	buyThresholdStr, _ := ctx.GetValue("BUY_THRESHOLD").(string)
+	sellThresholdStr, _ := ctx.GetValue("SELL_THRESHOLD").(string)
+	maxPositionStr, _ := ctx.GetValue("MAX_POSITION").(string)
 	buyThreshold, _ := strconv.ParseFloat(buyThresholdStr, 64)
 	sellThreshold, _ := strconv.ParseFloat(sellThresholdStr, 64)
 	maxPosition, _ := strconv.ParseFloat(maxPositionStr, 64)
@@ -236,7 +236,7 @@ func main() {
 	watcher := watch.NewWatcher(watcherConfig)
 
 	// Create environment variables for managed function
-	envVars := map[string]string{
+	envVars := map[string]any{
 		"API_KEY":        "demo-api-key-12345",
 		"BUY_THRESHOLD":  "44500.00",
 		"SELL_THRESHOLD": "45500.00",

@@ -58,7 +58,7 @@ func WatchCall[T any](
 	}
 
 	// VarState에서 읽기
-	return readVarStateOrInit[T](mgr, varName, init)
+	return readVarStateOrInit(mgr, varName, init)
 }
 
 // WatchFlow monitors a value via channel-based flow using WatchMachine.
@@ -97,7 +97,7 @@ func WatchFlow[T any](
 		machine.Start()
 	}
 
-	return readVarStateOrInit[T](mgr, varName, init)
+	return readVarStateOrInit(mgr, varName, init)
 }
 
 // readVarStateOrInit reads from VarState or returns init if not yet available.

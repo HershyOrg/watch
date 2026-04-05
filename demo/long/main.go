@@ -12,38 +12,17 @@ import (
 	"github.com/HershyOrg/watch/wm"
 )
 
-const (
-	DemoName          = "Long-Running Trading Simulator"
-	DemoVersion       = "1.0.0"
-	TargetDuration    = 10 * time.Minute
-	StatsInterval     = 3 * time.Minute
-	RebalanceInterval = 10 * time.Second
-	InitialCapital    = 10000.0
-)
-
 func main() {
-	fmt.Println(strings.Repeat("═", 80))
-	fmt.Printf("🚀 %s v%s\n", DemoName, DemoVersion)
-	fmt.Println(strings.Repeat("═", 80))
-
 	config := watch.DefaultWatcherConfig()
-	config.DefaultTimeout = 5 * time.Minute
-	config.RecoveryPolicy.MinConsecutiveFailures = 5
-	config.RecoveryPolicy.MaxConsecutiveFailures = 10
-	config.RecoveryPolicy.BaseRetryDelay = 10 * time.Second
-	config.RecoveryPolicy.MaxRetryDelay = 5 * time.Minute
-	config.RecoveryPolicy.LightweightRetryDelays = []time.Duration{
-		30 * time.Second, 1 * time.Minute, 2 * time.Minute,
-	}
 
 	watcher := watch.NewWatcher(config)
-	watcher.Manage(delcaredLogic, "TradingSimulator", map[string]string{
-		"DEMO_NAME": DemoName, "DEMO_VERSION": DemoVersion,
+	watcher.Manage(delcaredLogic, "TradingSimulator", map[string]any{
+		"DEMO_NAME": "Long-Running Trading Simulator", "DEMO_VERSION": "1.0.0",
 	}).Cleanup(cleanupReducer)
 
 	fmt.Println("\n▶️  Press Ctrl+C to stop | Auto-stop after 10 minutes")
 	result, err := watcher.StartAndWait(
-		watch.WithTimeout(TargetDuration),
+		watch.WithTimeout(10*time.Minute),
 		watch.WithInterrupt(),
 	)
 	if err != nil {
@@ -69,19 +48,19 @@ func delcaredLogic(msg *watch.Message, ctx watch.ManageContext) (watch.ControlSi
 	ethHV := watch.WatchFlow(0.0, newBinancePriceFlow("ETH"), "eth_price", ctx)
 
 	// WatchTick
-	statsTick := watch.WatchTick("stats_ticker", StatsInterval, ctx)
-	rebalanceTick := watch.WatchTick("rebalance_ticker", RebalanceInterval, ctx)
+	statsTick := watch.WatchTick("stats_ticker", 3*time.Minute, ctx)
+	rebalanceTick := watch.WatchTick("rebalance_ticker", 10*time.Second, ctx)
 
 	// TradingSimulator (Memo: 1회 생성, 캐시)
 	simulator := watch.Memo(func() *TradingSimulator {
-		return NewTradingSimulator(InitialCapital)
+		return NewTradingSimulator(10000.0)
 	}, "sim", ctx)
 
 	// 가격 반영
-	if btcHV.IsUpdatedValide() {
+	if btcHV.IsUpdatedValid() {
 		simulator.UpdatePrice("BTC", btcHV.Value)
 	}
-	if ethHV.IsUpdatedValide() {
+	if ethHV.IsUpdatedValid() {
 		simulator.UpdatePrice("ETH", ethHV.Value)
 	}
 

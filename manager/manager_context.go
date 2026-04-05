@@ -2,7 +2,6 @@
 package manager
 
 import (
-	"maps"
 	"context"
 	"sync"
 
@@ -15,6 +14,13 @@ type ContextLogger interface {
 	LogEffect(msg string)
 }
 
+// contextEntry is a single entry in the unified value store.
+// frozen entries (injected via SetFrozenValues) cannot be overwritten by SetValue/UpdateValue.
+type contextEntry struct {
+	value  any
+	frozen bool
+}
+
 // ManageContext implements shared.ManageContext interface.
 // This is a concrete implementation that manages execution context,
 // messages, manager reference, and user-defined values.
@@ -23,8 +29,7 @@ type ManageContext struct {
 	message         *shared.Message
 	triggeredSignal *shared.TriggeredSignal
 	manager         *Manager // Manager reference (type-safe!)
-	valueStore      map[string]any
-	envVarMap       map[string]string // Environment variables (immutable after initialization)
+	valueStore      map[string]contextEntry
 	valuesMutex     sync.RWMutex
 	logger          ContextLogger
 }
@@ -35,8 +40,7 @@ func NewManageContext(ctx context.Context, logger ContextLogger) *ManageContext 
 		Context:    ctx,
 		message:    nil,
 		manager:    nil,
-		valueStore: make(map[string]any),
-		envVarMap:  make(map[string]string),
+		valueStore: make(map[string]contextEntry),
 		logger:     logger,
 	}
 }
@@ -64,21 +68,29 @@ func (mc *ManageContext) GetTriggeredSignal() *shared.TriggeredSignal {
 func (mc *ManageContext) GetValue(key string) any {
 	mc.valuesMutex.RLock()
 	defer mc.valuesMutex.RUnlock()
-	return mc.valueStore[key]
+	entry, ok := mc.valueStore[key]
+	if !ok {
+		return nil
+	}
+	return entry.value
 }
 
 func (mc *ManageContext) SetValue(key string, value any) {
 	mc.valuesMutex.Lock()
 	defer mc.valuesMutex.Unlock()
 
-	oldValue := mc.valueStore[key]
-	mc.valueStore[key] = value
+	if entry, exists := mc.valueStore[key]; exists && entry.frozen {
+		return
+	}
 
-	// Log the state change
+	oldEntry := mc.valueStore[key]
+	mc.valueStore[key] = contextEntry{value: value}
+
 	if mc.logger != nil {
-		mc.logger.LogContextValue(key, oldValue, value, "initialized")
-		if oldValue != nil {
-			mc.logger.LogContextValue(key, oldValue, value, "updated")
+		if oldEntry.value == nil {
+			mc.logger.LogContextValue(key, nil, value, "initialized")
+		} else {
+			mc.logger.LogContextValue(key, oldEntry.value, value, "updated")
 		}
 	}
 }
@@ -87,20 +99,17 @@ func (mc *ManageContext) UpdateValue(key string, updateFn func(current any) any)
 	mc.valuesMutex.Lock()
 	defer mc.valuesMutex.Unlock()
 
-	// Get current value
-	currentValue := mc.valueStore[key]
+	entry := mc.valueStore[key]
+	if entry.frozen {
+		return entry.value
+	}
 
-	// Create a deep copy to pass to updateFn
-	currentCopy := shared.DeepCopy(currentValue)
-
-	// Call the update function with the copy
+	currentCopy := shared.DeepCopy(entry.value)
 	newValue := updateFn(currentCopy)
 
-	// Store the new value
-	oldValue := mc.valueStore[key]
-	mc.valueStore[key] = newValue
+	oldValue := entry.value
+	mc.valueStore[key] = contextEntry{value: newValue}
 
-	// Log the state change
 	if mc.logger != nil {
 		if oldValue == nil {
 			mc.logger.LogContextValue(key, nil, newValue, "initialized")
@@ -132,27 +141,18 @@ func (mc *ManageContext) UpdateContext(ctx context.Context) {
 	mc.Context = ctx
 }
 
-// GetEnv returns the environment variable value for the given key.
-// The second return value (ok) is true if the key exists, false otherwise.
-// This method is safe for concurrent access as envVarMap is immutable after initialization.
-func (mc *ManageContext) GetEnv(key string) (string, bool) {
-	mc.valuesMutex.RLock()
-	defer mc.valuesMutex.RUnlock()
-	val, ok := mc.envVarMap[key]
-	return val, ok
-}
-
-// SetEnvVars sets the environment variables for this context.
+// SetFrozenValues injects immutable values into the store.
+// Frozen entries cannot be overwritten by SetValue/UpdateValue.
 // This should only be called during initialization (by Manager creation).
-// The envVars map is deep copied to ensure immutability.
-func (mc *ManageContext) SetEnvVars(envVars map[string]string) {
+func (mc *ManageContext) SetFrozenValues(values map[string]any) {
 	mc.valuesMutex.Lock()
 	defer mc.valuesMutex.Unlock()
 
-	// Deep copy for immutability
-	mc.envVarMap = make(map[string]string)
-	if envVars != nil {
-		maps.Copy(mc.envVarMap, envVars)
+	for k, v := range values {
+		mc.valueStore[k] = contextEntry{value: v, frozen: true}
+		if mc.logger != nil {
+			mc.logger.LogContextValue(k, nil, v, "frozen_initialized")
+		}
 	}
 }
 

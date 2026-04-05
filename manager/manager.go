@@ -37,7 +37,7 @@ func NewManager(
 	name string,
 	managedFunc ManagedFunc,
 	cleaner Cleaner,
-	envVars map[string]string,
+	envVars map[string]any,
 ) *Manager {
 	logger := NewLogger(config.MaxLogEntries)
 
@@ -70,7 +70,7 @@ func NewManager(
 	// Get ManageContext from MgrFuncRunner and set Manager reference
 	if manageCtx, ok := runner.GetManageContext().(*ManageContext); ok {
 		manageCtx.SetManager(mgr)
-		manageCtx.SetEnvVars(envVars)
+		manageCtx.SetFrozenValues(envVars)
 	}
 
 	// 자체 ctx로 리듀서 이벤트 루프 즉시 시작 (WatchMachine 패턴)
