@@ -15,7 +15,7 @@ import (
 // Manager는 wm.Subscriber 인터페이스를 직접 구현한다.
 type Manager struct {
 	config *shared.WatcherConfig
-	name   string // managerName (Subscriber 식별용)
+	name   string // managerName (식별용)
 
 	logger *Logger
 

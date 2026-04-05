@@ -21,13 +21,15 @@ type LoopHistoryConfig struct {
 // * 다만 그 자체로 (이론상) 과거 불변의 로그 with TimeStamp므로,
 // * State와 같은 층위의 신뢰도를 지닌다.
 type LoopHistory struct {
-	varName     string
-	mu          sync.RWMutex
-	buf         []ReducedSnapshot
-	head        int // 가장 오래된 항목의 인덱스
-	count       int // 현재 유효 항목 수
-	cap         int // buf 크기 (MaxLen)
-	maxDur      time.Duration
+	varName string
+	mu      sync.RWMutex
+	buf     []ReducedSnapshot
+	head    int // 가장 오래된 항목의 인덱스
+	count   int // 현재 유효 항목 수
+	cap     int // buf 크기 (MaxLen)
+	maxDur  time.Duration
+	//* Unint64는 그냥 그대로 두기로 함
+	//* 현실적으로 오버플로를 대비할 이유가 없음. (1 nano sec마다 append해도 오버플로에 580년 걸림.)
 	appendIndex atomic.Uint64 // Append될 때마다 단조증가하는 인덱스
 }
 

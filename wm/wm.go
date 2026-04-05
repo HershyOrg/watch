@@ -88,7 +88,8 @@ func NewWatchMachine(cfg WatchMachineConfig) *WatchMachine {
 	if cfg.RecoveryPolicy.MaxConsecutiveFailures == 0 {
 		cfg.RecoveryPolicy = DefaultLoopRecoveryPolicy()
 	}
-
+	//* 여기 하드코딩된 부분은
+	//* 추후 WatchXXX에 윈도우 추가 시 설정값 기반으로 바뀔 예정임.
 	history := NewLoopHistory(LoopHistoryConfig{
 		varName: cfg.VarName,
 		MaxLen:  30000,

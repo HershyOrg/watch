@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -13,9 +12,8 @@ import (
 )
 
 func main() {
-	config := watch.DefaultWatcherConfig()
 
-	watcher := watch.NewWatcher(config)
+	watcher := watch.NewWatcher(watch.DefaultWatcherConfig())
 	watcher.Manage(delcaredLogic, "TradingSimulator", map[string]any{
 		"DEMO_NAME": "Long-Running Trading Simulator", "DEMO_VERSION": "1.0.0",
 	}).Cleanup(cleanupReducer)
@@ -27,7 +25,7 @@ func main() {
 	)
 	if err != nil {
 		fmt.Printf("❌ Failed: %v\n", err)
-		os.Exit(1)
+		return
 	}
 
 	switch result.Reason {
