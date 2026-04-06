@@ -118,11 +118,6 @@ func newBinancePriceFlow(symbol string) wm.SetupUpdateFuncChan[float64] {
 			return nil, fmt.Errorf("binance connect: %w", err)
 		}
 
-		go func() {
-			<-flowCtx.Done()
-			stream.Close()
-		}()
-
 		var getStream func(ctx context.Context) (<-chan shared.FlowValue[float64], error)
 		switch symbol {
 		case "BTC":
@@ -143,16 +138,30 @@ func newBinancePriceFlow(symbol string) wm.SetupUpdateFuncChan[float64] {
 		updateCh := make(chan wm.UpdateFunc[float64], 100)
 		go func() {
 			defer close(updateCh)
-			for fv := range sourceCh {
-				val := fv
-				updateCh <- func(prev shared.WatchValue[float64]) (shared.WatchValue[float64], bool) {
-					if val.E != nil {
-						return shared.WatchValue[float64]{Error: val.E}, false
+			defer stream.Close()
+			for {
+				select {
+				case fv, ok := <-sourceCh:
+					if !ok {
+						return
 					}
-					if val.SkipSignal {
-						return prev, true
+					val := fv
+					fn := func(prev shared.WatchValue[float64]) (shared.WatchValue[float64], bool) {
+						if val.E != nil {
+							return shared.WatchValue[float64]{Error: val.E}, false
+						}
+						if val.SkipSignal {
+							return prev, true
+						}
+						return shared.WatchValue[float64]{Value: val.V}, false
 					}
-					return shared.WatchValue[float64]{Value: val.V}, false
+					select {
+					case updateCh <- fn:
+					case <-flowCtx.Done():
+						return
+					}
+				case <-flowCtx.Done():
+					return
 				}
 			}
 		}()
