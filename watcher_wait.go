@@ -126,7 +126,7 @@ func (w *Watcher) WaitForState(target ControlState, opts ...WaitOption) WaitResu
 // StartAndWait is a convenience method: StartAndRun() + WaitForTerminal(opts...).
 // If StartAndRun fails, returns a zero WaitResult and the error.
 func (w *Watcher) StartAndWait(opts ...WaitOption) (WaitResult, error) {
-	if err := w.StartAndRun(); err != nil {
+	if err := w.startAndRun(); err != nil {
 		return WaitResult{}, err
 	}
 	return w.WaitForTerminal(opts...), nil

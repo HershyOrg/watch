@@ -69,23 +69,24 @@ func main1() {
 	})
 
 	fmt.Println("Starting watcher...")
-	err := watcher.StartAndRun()
-	if err != nil {
+
+	go func() {
+		// Wait for reactive executions triggered by WatchCall
+		time.Sleep(3 * time.Second)
+
+		fmt.Printf("\nFinal state: %s\n", watcher.GetState())
+
+		// Print summary
+		fmt.Println("\n=== Execution Summary ===")
+		watcher.GetLogger().PrintSummary()
+
+		if err := watcher.StopAll(); err != nil {
+			fmt.Printf("Error stopping: %v\n", err)
+		}
+	}()
+
+	if _, err := watcher.StartAndWait(); err != nil {
 		panic(err)
-	}
-
-	// Wait for reactive executions triggered by WatchCall
-	time.Sleep(3 * time.Second)
-
-	fmt.Printf("\nFinal state: %s\n", watcher.GetState())
-
-	// Print summary
-	fmt.Println("\n=== Execution Summary ===")
-	watcher.GetLogger().PrintSummary()
-
-	err = watcher.StopAll()
-	if err != nil {
-		fmt.Printf("Error stopping: %v\n", err)
 	}
 
 	fmt.Println("\n=== Demo Complete ===")

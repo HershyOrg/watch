@@ -3,16 +3,16 @@ package main
 import (
 	"context"
 	"fmt"
-	"strings"
+	"net/http"
 	"time"
 
 	"github.com/HershyOrg/watch"
 	"github.com/HershyOrg/watch/shared"
 	"github.com/HershyOrg/watch/wm"
+	"github.com/gorilla/websocket"
 )
 
 func main() {
-
 	watcher := watch.NewWatcher(watch.DefaultWatcherConfig())
 	watcher.Manage(delcaredLogic, "TradingSimulator", map[string]any{
 		"DEMO_NAME": "Long-Running Trading Simulator", "DEMO_VERSION": "1.0.0",
@@ -42,22 +42,26 @@ func main() {
 
 func delcaredLogic(msg *watch.Message, ctx watch.ManageContext) (watch.ControlSignal, error) {
 	// WatchFlow: 실시간 가격 (Setup에서 WebSocket 생성+연결, FlowCtx 종료 시 자동 Close)
-	btcHV := watch.WatchFlow(0.0, newBinancePriceFlow("BTC"), "btc_price", ctx)
-	ethHV := watch.WatchFlow(0.0, newBinancePriceFlow("ETH"), "eth_price", ctx)
+	btcHV := watch.WatchFlow(0.0, newBinancePriceFlow("BTC", newBinanceDialer()), "btc_price", ctx)
+	ethHV := watch.WatchFlow(0.0, newBinancePriceFlow("ETH", newBinanceDialer()), "eth_price", ctx)
 
 	// WatchTick
 	statsTick := watch.WatchTick("stats_ticker", 3*time.Minute, ctx)
-	rebalanceTick := watch.WatchTick("rebalance_ticker", 10*time.Second, ctx)
-
 	// TradingSimulator (Memo: 1회 생성, 캐시)
+	rebalanceTick := watch.WatchTick("rebalance_ticker", 10*time.Second, ctx)
 	simulator := watch.Memo(func() *TradingSimulator {
 		return NewTradingSimulator(10000.0)
 	}, "sim", ctx)
+	println(ctx.GetValue("DEMO_NAME").(string))
+	if msg == nil {
+		msg = &watch.Message{}
+	}
 
 	// 가격 반영
 	if btcHV.IsUpdatedValid() {
 		simulator.UpdatePrice("BTC", btcHV.Value)
 	}
+
 	if ethHV.IsUpdatedValid() {
 		simulator.UpdatePrice("ETH", ethHV.Value)
 	}
@@ -99,8 +103,38 @@ func delcaredLogic(msg *watch.Message, ctx watch.ManageContext) (watch.ControlSi
 	}
 
 	// 사용자 명령
-	if msg != nil && msg.Content != "" {
-		handleCommand(msg.Content, simulator, btcHV.Value, ethHV.Value, ctx)
+	switch msg.Content {
+	case "":
+	case "status", "s":
+		p := simulator.GetPortfolio()
+		watch.PrintWithLog(fmt.Sprintf(
+			"📊 BTC=$%.2f ETH=$%.2f | Portfolio: $%.2f (%.2f%%) | Trading: %v",
+			btcHV.Value, ethHV.Value, p.CurrentValue, p.ProfitLossPercent, !simulator.IsPaused()), ctx)
+	case "portfolio", "p":
+		p := simulator.GetPortfolio()
+		watch.PrintWithLog(fmt.Sprintf(
+			"💼 $%.2f (%.2f%%) | BTC: %.6f ETH: %.6f | Cash: $%.2f",
+			p.CurrentValue, p.ProfitLossPercent, p.BTCAmount, p.ETHAmount, p.CurrentUSD), ctx)
+	case "trades", "t":
+		trades := simulator.GetTrades()
+		start := len(trades) - 10
+		if start < 0 {
+			start = 0
+		}
+		for _, t := range trades[start:] {
+			watch.PrintWithLog(fmt.Sprintf("   %s %s %s: %.6f @ $%.2f (%s)",
+				t.Time.Format("15:04:05"), t.Action, t.Symbol, t.Amount, t.Price, t.Reason), ctx)
+		}
+	case "pause":
+		simulator.Pause()
+		watch.PrintWithLog("⏸️  Trading paused", ctx)
+	case "resume":
+		simulator.Resume()
+		watch.PrintWithLog("▶️  Trading resumed", ctx)
+	case "help", "h", "?":
+		watch.PrintWithLog("Commands: status | portfolio | trades | pause | resume | help", ctx)
+	default:
+		watch.PrintWithLog("❌ Unknown command (type 'help')", ctx)
 	}
 
 	return watch.None(), nil
@@ -108,12 +142,19 @@ func delcaredLogic(msg *watch.Message, ctx watch.ManageContext) (watch.ControlSi
 
 // --- helpers ---
 
+func newBinanceDialer() *websocket.Dialer {
+	return &websocket.Dialer{
+		Proxy:            http.ProxyFromEnvironment,
+		HandshakeTimeout: 45 * time.Second,
+	}
+}
+
 // newBinancePriceFlow returns a SetupUpdateFuncChan that fully owns its BinanceStream.
 // Setup(1회): BinanceStream 생성 → Connect → 가격 채널 구독
 // FlowCtx.Done(): WebSocket 자동 Close
-func newBinancePriceFlow(symbol string) wm.SetupUpdateFuncChan[float64] {
+func newBinancePriceFlow(symbol string, dialer *websocket.Dialer) wm.SetupUpdateFuncChan[float64] {
 	return func(flowCtx wm.FlowContext) (chan wm.UpdateFunc[float64], error) {
-		stream := NewBinanceStream()
+		stream := NewBinanceStream(dialer)
 		if err := stream.Connect(); err != nil {
 			return nil, fmt.Errorf("binance connect: %w", err)
 		}
@@ -170,44 +211,9 @@ func newBinancePriceFlow(symbol string) wm.SetupUpdateFuncChan[float64] {
 	}
 }
 
-func handleCommand(cmd string, sim *TradingSimulator, btcPrice, ethPrice float64, ctx watch.ManageContext) {
-	cmd = strings.TrimSpace(strings.ToLower(cmd))
-	switch cmd {
-	case "status", "s":
-		p := sim.GetPortfolio()
-		watch.PrintWithLog(fmt.Sprintf(
-			"📊 BTC=$%.2f ETH=$%.2f | Portfolio: $%.2f (%.2f%%) | Trading: %v",
-			btcPrice, ethPrice, p.CurrentValue, p.ProfitLossPercent, !sim.IsPaused()), ctx)
-	case "portfolio", "p":
-		p := sim.GetPortfolio()
-		watch.PrintWithLog(fmt.Sprintf(
-			"💼 $%.2f (%.2f%%) | BTC: %.6f ETH: %.6f | Cash: $%.2f",
-			p.CurrentValue, p.ProfitLossPercent, p.BTCAmount, p.ETHAmount, p.CurrentUSD), ctx)
-	case "trades", "t":
-		trades := sim.GetTrades()
-		start := len(trades) - 10
-		if start < 0 {
-			start = 0
-		}
-		for _, t := range trades[start:] {
-			watch.PrintWithLog(fmt.Sprintf("   %s %s %s: %.6f @ $%.2f (%s)",
-				t.Time.Format("15:04:05"), t.Action, t.Symbol, t.Amount, t.Price, t.Reason), ctx)
-		}
-	case "pause":
-		sim.Pause()
-		watch.PrintWithLog("⏸️  Trading paused", ctx)
-	case "resume":
-		sim.Resume()
-		watch.PrintWithLog("▶️  Trading resumed", ctx)
-	case "help", "h", "?":
-		watch.PrintWithLog("Commands: status | portfolio | trades | pause | resume | help", ctx)
-	default:
-		watch.PrintWithLog(fmt.Sprintf("❌ Unknown: '%s' (type 'help')", cmd), ctx)
-	}
-}
-
 func cleanupReducer(ctx watch.ManageContext) {
 	fmt.Println("\n🔧 Cleanup...")
+
 	// Stream cleanup: WatchFlow의 FlowContext 종료가 자동 처리
 	fmt.Println("✅ Cleanup complete")
 }

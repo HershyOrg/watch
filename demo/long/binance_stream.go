@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -16,6 +17,7 @@ type BinanceStream struct {
 	// Internal channels for message distribution
 	btcInternalChan chan shared.FlowValue[float64]
 	ethInternalChan chan shared.FlowValue[float64]
+	dialer          *websocket.Dialer
 
 	// Current prices (atomic access)
 	currentBTC atomic.Value // float64
@@ -52,11 +54,19 @@ type BinanceTradeMsg struct {
 	} `json:"data"`
 }
 
-// NewBinanceStream creates a new Binance WebSocket stream client
-func NewBinanceStream() *BinanceStream {
+// NewBinanceStream creates a new Binance WebSocket stream client.
+// The dialer is injected so the WatchFlow setup has explicit network input.
+func NewBinanceStream(dialer *websocket.Dialer) *BinanceStream {
+	if dialer == nil {
+		dialer = &websocket.Dialer{
+			Proxy:            http.ProxyFromEnvironment,
+			HandshakeTimeout: 45 * time.Second,
+		}
+	}
 	bs := &BinanceStream{
 		btcInternalChan: make(chan shared.FlowValue[float64], 100),
 		ethInternalChan: make(chan shared.FlowValue[float64], 100),
+		dialer:          dialer,
 		stopChan:        make(chan struct{}),
 	}
 
@@ -78,8 +88,7 @@ func (bs *BinanceStream) Connect() error {
 	}
 
 	url := "wss://stream.binance.com:9443/stream?streams=btcusdt@trade/ethusdt@trade"
-
-	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
+	conn, _, err := bs.dialer.Dial(url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to connect to Binance: %w", err)
 	}

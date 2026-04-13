@@ -60,8 +60,7 @@ func main2() {
 
 	// Start watcher
 	fmt.Println("Starting watcher...")
-	err := watcher.StartAndRun()
-	if err != nil {
+	if _, err := watcher.StartAndWait(); err != nil {
 		panic(err)
 	}
 
@@ -87,8 +86,7 @@ func main2() {
 	watcher.GetLogger().PrintSummary()
 
 	// Stop watcher
-	err = watcher.StopAll()
-	if err != nil {
+	if err := watcher.StopAll(); err != nil {
 		fmt.Printf("Error stopping watcher: %v\n", err)
 	}
 

@@ -167,7 +167,7 @@ func (w *Watcher) StopAll() error {
 
 // StartAndRun is a convenience method: StartSelf() + RunMgr().
 // Watcher를 시작하고 Manager의 ManagedFunc를 초기 실행한다.
-func (w *Watcher) StartAndRun() error {
+func (w *Watcher) startAndRun() error {
 	if err := w.StartSelf(); err != nil {
 		return err
 	}
