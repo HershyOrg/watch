@@ -1,19 +1,20 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/HershyOrg/watch"
-	"github.com/HershyOrg/watch/shared"
-	"github.com/HershyOrg/watch/wm"
-	"github.com/gorilla/websocket"
+	"github.com/HershyOrg/watch/demo/binance"
 )
 
+var a = "a"
+
 func main() {
-	watcher := watch.NewWatcher(watch.DefaultWatcherConfig())
+	print(a)
+	config := watch.DefaultWatcherConfig()
+	config.DefaultTimeout = 2 * time.Minute
+	watcher := watch.NewWatcher(config)
 	watcher.Manage(delcaredLogic, "TradingSimulator", map[string]any{
 		"DEMO_NAME": "Long-Running Trading Simulator", "DEMO_VERSION": "1.0.0",
 	}).Cleanup(cleanupReducer)
@@ -42,8 +43,8 @@ func main() {
 
 func delcaredLogic(msg *watch.Message, ctx watch.ManageContext) (watch.ControlSignal, error) {
 	// WatchFlow: 실시간 가격 (Setup에서 WebSocket 생성+연결, FlowCtx 종료 시 자동 Close)
-	btcHV := watch.WatchFlow(0.0, newBinancePriceFlow("BTC", newBinanceDialer()), "btc_price", ctx)
-	ethHV := watch.WatchFlow(0.0, newBinancePriceFlow("ETH", newBinanceDialer()), "eth_price", ctx)
+	btcHV := watch.WatchFlow(0.0, binance.BTCPriceFlow, "btc_price", ctx)
+	ethHV := watch.WatchFlow(0.0, binance.ETHPriceFlow, "eth_price", ctx)
 
 	// WatchTick
 	statsTick := watch.WatchTick("stats_ticker", 3*time.Minute, ctx)
@@ -52,11 +53,9 @@ func delcaredLogic(msg *watch.Message, ctx watch.ManageContext) (watch.ControlSi
 	simulator := watch.Memo(func() *TradingSimulator {
 		return NewTradingSimulator(10000.0)
 	}, "sim", ctx)
-	println(ctx.GetValue("DEMO_NAME").(string))
 	if msg == nil {
 		msg = &watch.Message{}
 	}
-
 	// 가격 반영
 	if btcHV.IsUpdatedValid() {
 		simulator.UpdatePrice("BTC", btcHV.Value)
@@ -65,7 +64,6 @@ func delcaredLogic(msg *watch.Message, ctx watch.ManageContext) (watch.ControlSi
 	if ethHV.IsUpdatedValid() {
 		simulator.UpdatePrice("ETH", ethHV.Value)
 	}
-
 	// 주기적 리포트
 	if statsTick.IsTriggered(ctx) {
 		p := simulator.GetPortfolio()
@@ -86,9 +84,35 @@ func delcaredLogic(msg *watch.Message, ctx watch.ManageContext) (watch.ControlSi
 		}
 	}
 
-	// 전략 실행
+	// 전략: 신호 관측 → 정책 결정 → 효과 적용
 	if !simulator.IsPaused() {
-		trades := simulator.ExecuteStrategy()
+		var trades []Trade
+		for _, sym := range []string{"BTC", "ETH"} {
+			// MA5/MA15 크로스오버
+			switch simulator.DetectCross(sym).Kind {
+			case CrossGolden:
+				if t := simulator.Buy(sym, 100, "golden_cross"); t != nil {
+					trades = append(trades, *t)
+				}
+			case CrossDeath:
+				if t := simulator.SellFraction(sym, 0.5, "death_cross"); t != nil {
+					trades = append(trades, *t)
+				}
+			}
+
+			// 2% 단기 변동
+			switch simulator.DetectVolatility(sym, 0.02, 10).Kind {
+			case VolSpike: // 급등 → 익절
+				if t := simulator.SellFraction(sym, 0.3, "take_profit"); t != nil {
+					trades = append(trades, *t)
+				}
+			case VolDip: // 급락 → 저가매수
+				if t := simulator.Buy(sym, 50, "buy_dip"); t != nil {
+					trades = append(trades, *t)
+				}
+			}
+		}
+
 		if len(trades) > 0 {
 			watch.PrintWithLog(fmt.Sprintf("\n💹 %d trades:", len(trades)), ctx)
 			for _, t := range trades {
@@ -117,10 +141,7 @@ func delcaredLogic(msg *watch.Message, ctx watch.ManageContext) (watch.ControlSi
 			p.CurrentValue, p.ProfitLossPercent, p.BTCAmount, p.ETHAmount, p.CurrentUSD), ctx)
 	case "trades", "t":
 		trades := simulator.GetTrades()
-		start := len(trades) - 10
-		if start < 0 {
-			start = 0
-		}
+		start := max(len(trades)-10, 0)
 		for _, t := range trades[start:] {
 			watch.PrintWithLog(fmt.Sprintf("   %s %s %s: %.6f @ $%.2f (%s)",
 				t.Time.Format("15:04:05"), t.Action, t.Symbol, t.Amount, t.Price, t.Reason), ctx)
@@ -140,79 +161,10 @@ func delcaredLogic(msg *watch.Message, ctx watch.ManageContext) (watch.ControlSi
 	return watch.None(), nil
 }
 
-// --- helpers ---
-
-func newBinanceDialer() *websocket.Dialer {
-	return &websocket.Dialer{
-		Proxy:            http.ProxyFromEnvironment,
-		HandshakeTimeout: 45 * time.Second,
-	}
-}
-
-// newBinancePriceFlow returns a SetupUpdateFuncChan that fully owns its BinanceStream.
-// Setup(1회): BinanceStream 생성 → Connect → 가격 채널 구독
-// FlowCtx.Done(): WebSocket 자동 Close
-func newBinancePriceFlow(symbol string, dialer *websocket.Dialer) wm.SetupUpdateFuncChan[float64] {
-	return func(flowCtx wm.FlowContext) (chan wm.UpdateFunc[float64], error) {
-		stream := NewBinanceStream(dialer)
-		if err := stream.Connect(); err != nil {
-			return nil, fmt.Errorf("binance connect: %w", err)
-		}
-
-		var getStream func(ctx context.Context) (<-chan shared.FlowValue[float64], error)
-		switch symbol {
-		case "BTC":
-			getStream = stream.GetBTCPriceStream()
-		case "ETH":
-			getStream = stream.GetETHPriceStream()
-		default:
-			stream.Close()
-			return nil, fmt.Errorf("unknown symbol: %s", symbol)
-		}
-
-		sourceCh, err := getStream(flowCtx)
-		if err != nil {
-			stream.Close()
-			return nil, err
-		}
-
-		updateCh := make(chan wm.UpdateFunc[float64], 100)
-		go func() {
-			defer close(updateCh)
-			defer stream.Close()
-			for {
-				select {
-				case fv, ok := <-sourceCh:
-					if !ok {
-						return
-					}
-					val := fv
-					fn := func(prev shared.WatchValue[float64]) (shared.WatchValue[float64], bool) {
-						if val.E != nil {
-							return shared.WatchValue[float64]{Error: val.E}, false
-						}
-						if val.SkipSignal {
-							return prev, true
-						}
-						return shared.WatchValue[float64]{Value: val.V}, false
-					}
-					select {
-					case updateCh <- fn:
-					case <-flowCtx.Done():
-						return
-					}
-				case <-flowCtx.Done():
-					return
-				}
-			}
-		}()
-
-		return updateCh, nil
-	}
-}
-
 func cleanupReducer(ctx watch.ManageContext) {
 	fmt.Println("\n🔧 Cleanup...")
+	//* ctx사용은 가능
+	ctx.GetValue("aa")
 
 	// Stream cleanup: WatchFlow의 FlowContext 종료가 자동 처리
 	fmt.Println("✅ Cleanup complete")

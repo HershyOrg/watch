@@ -104,97 +104,151 @@ func (ts *TradingSimulator) UpdatePrice(symbol string, price float64) {
 	}
 }
 
-// ExecuteStrategy runs the trading strategy and returns executed trades
-func (ts *TradingSimulator) ExecuteStrategy() []Trade {
-	if ts.paused.Load() {
-		return nil
-	}
+// CrossKind represents a moving-average crossover transition.
+type CrossKind int
 
+const (
+	CrossNone CrossKind = iota
+	CrossGolden
+	CrossDeath
+)
+
+// CrossSignal is the observation returned by DetectCross.
+type CrossSignal struct {
+	Kind CrossKind
+	MA5  float64
+	MA15 float64
+}
+
+// VolKind represents a short-window volatility event.
+type VolKind int
+
+const (
+	VolNone VolKind = iota
+	VolSpike
+	VolDip
+)
+
+// VolSignal is the observation returned by DetectVolatility.
+type VolSignal struct {
+	Kind          VolKind
+	ChangePercent float64
+}
+
+// DetectCross observes MA5 vs MA15 and reports a transition relative to the
+// previously observed direction. The internal direction is advanced as a side
+// effect so each transition fires exactly once.
+func (ts *TradingSimulator) DetectCross(symbol string) CrossSignal {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 
-	var executedTrades []Trade
-
-	// 1. Check moving average crossover for BTC
-	if len(ts.priceHistory.btcPrices) >= 15 {
-		btcMA5 := ts.calculateMA("BTC", 5)
-		btcMA15 := ts.calculateMA("BTC", 15)
-
-		currentCross := ""
-		if btcMA5 > btcMA15 {
-			currentCross = "up"
-		} else if btcMA5 < btcMA15 {
-			currentCross = "down"
-		}
-
-		// Detect crossover
-		if ts.lastCrossover.btc == "down" && currentCross == "up" {
-			// Golden Cross - BUY signal
-			if ts.portfolio.CurrentUSD > 100 {
-				trade := ts.executeBuy("BTC", 100, "golden_cross")
-				if trade != nil {
-					executedTrades = append(executedTrades, *trade)
-				}
-			}
-		} else if ts.lastCrossover.btc == "up" && currentCross == "down" {
-			// Death Cross - SELL signal
-			if ts.portfolio.BTCAmount > 0.001 {
-				trade := ts.executeSell("BTC", ts.portfolio.BTCAmount*0.5, "death_cross")
-				if trade != nil {
-					executedTrades = append(executedTrades, *trade)
-				}
-			}
-		}
-
-		ts.lastCrossover.btc = currentCross
+	var prices []PricePoint
+	var lastPtr *string
+	switch symbol {
+	case "BTC":
+		prices = ts.priceHistory.btcPrices
+		lastPtr = &ts.lastCrossover.btc
+	case "ETH":
+		prices = ts.priceHistory.ethPrices
+		lastPtr = &ts.lastCrossover.eth
+	default:
+		return CrossSignal{}
 	}
 
-	// 2. Check moving average crossover for ETH
-	if len(ts.priceHistory.ethPrices) >= 15 {
-		ethMA5 := ts.calculateMA("ETH", 5)
-		ethMA15 := ts.calculateMA("ETH", 15)
-
-		currentCross := ""
-		if ethMA5 > ethMA15 {
-			currentCross = "up"
-		} else if ethMA5 < ethMA15 {
-			currentCross = "down"
-		}
-
-		// Detect crossover
-		if ts.lastCrossover.eth == "down" && currentCross == "up" {
-			// Golden Cross - BUY signal
-			if ts.portfolio.CurrentUSD > 100 {
-				trade := ts.executeBuy("ETH", 100, "golden_cross")
-				if trade != nil {
-					executedTrades = append(executedTrades, *trade)
-				}
-			}
-		} else if ts.lastCrossover.eth == "up" && currentCross == "down" {
-			// Death Cross - SELL signal
-			if ts.portfolio.ETHAmount > 0.01 {
-				trade := ts.executeSell("ETH", ts.portfolio.ETHAmount*0.5, "death_cross")
-				if trade != nil {
-					executedTrades = append(executedTrades, *trade)
-				}
-			}
-		}
-
-		ts.lastCrossover.eth = currentCross
+	if len(prices) < 15 {
+		return CrossSignal{}
 	}
 
-	// 3. Check volatility (±2% in last 10 points)
-	btcVolTrade := ts.checkVolatility("BTC", 0.02, 10)
-	if btcVolTrade != nil {
-		executedTrades = append(executedTrades, *btcVolTrade)
+	ma5 := ts.calculateMA(symbol, 5)
+	ma15 := ts.calculateMA(symbol, 15)
+
+	current := ""
+	if ma5 > ma15 {
+		current = "up"
+	} else if ma5 < ma15 {
+		current = "down"
 	}
 
-	ethVolTrade := ts.checkVolatility("ETH", 0.02, 10)
-	if ethVolTrade != nil {
-		executedTrades = append(executedTrades, *ethVolTrade)
+	kind := CrossNone
+	if *lastPtr == "down" && current == "up" {
+		kind = CrossGolden
+	} else if *lastPtr == "up" && current == "down" {
+		kind = CrossDeath
+	}
+	*lastPtr = current
+
+	return CrossSignal{Kind: kind, MA5: ma5, MA15: ma15}
+}
+
+// DetectVolatility observes price change over the last `lookback` points and
+// reports Spike/Dip if |change| exceeds threshold.
+func (ts *TradingSimulator) DetectVolatility(symbol string, threshold float64, lookback int) VolSignal {
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+
+	var prices []PricePoint
+	switch symbol {
+	case "BTC":
+		prices = ts.priceHistory.btcPrices
+	case "ETH":
+		prices = ts.priceHistory.ethPrices
+	default:
+		return VolSignal{}
 	}
 
-	return executedTrades
+	if len(prices) < lookback {
+		return VolSignal{}
+	}
+
+	oldPrice := prices[len(prices)-lookback].Price
+	currentPrice := prices[len(prices)-1].Price
+	change := (currentPrice - oldPrice) / oldPrice
+
+	switch {
+	case change > threshold:
+		return VolSignal{Kind: VolSpike, ChangePercent: change}
+	case change < -threshold:
+		return VolSignal{Kind: VolDip, ChangePercent: change}
+	default:
+		return VolSignal{Kind: VolNone, ChangePercent: change}
+	}
+}
+
+// Buy executes a USD-denominated buy. Returns nil if funds or price unavailable.
+func (ts *TradingSimulator) Buy(symbol string, usdAmount float64, reason string) *Trade {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	return ts.executeBuy(symbol, usdAmount, reason)
+}
+
+// Sell executes a sell for a specific coin amount.
+func (ts *TradingSimulator) Sell(symbol string, amount float64, reason string) *Trade {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	return ts.executeSell(symbol, amount, reason)
+}
+
+// SellFraction sells `frac` of the current holding for `symbol`.
+// Returns nil if holding is too small to be meaningful.
+func (ts *TradingSimulator) SellFraction(symbol string, frac float64, reason string) *Trade {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	var holding, minHolding float64
+	switch symbol {
+	case "BTC":
+		holding = ts.portfolio.BTCAmount
+		minHolding = 0.001
+	case "ETH":
+		holding = ts.portfolio.ETHAmount
+		minHolding = 0.01
+	default:
+		return nil
+	}
+	if holding < minHolding {
+		return nil
+	}
+	return ts.executeSell(symbol, holding*frac, reason)
 }
 
 // calculateMA calculates moving average (must be called with lock held)
@@ -219,47 +273,6 @@ func (ts *TradingSimulator) calculateMA(symbol string, period int) float64 {
 	}
 
 	return sum / float64(period)
-}
-
-// checkVolatility detects rapid price changes (must be called with lock held)
-func (ts *TradingSimulator) checkVolatility(symbol string, threshold float64, lookback int) *Trade {
-	var prices []PricePoint
-	switch symbol {
-	case "BTC":
-		prices = ts.priceHistory.btcPrices
-	case "ETH":
-		prices = ts.priceHistory.ethPrices
-	default:
-		return nil
-	}
-
-	if len(prices) < lookback {
-		return nil
-	}
-
-	// Calculate price change percentage
-	oldPrice := prices[len(prices)-lookback].Price
-	currentPrice := prices[len(prices)-1].Price
-	changePercent := (currentPrice - oldPrice) / oldPrice
-
-	// Rapid rise - take profit
-	if changePercent > threshold {
-		if symbol == "BTC" && ts.portfolio.BTCAmount > 0.001 {
-			return ts.executeSell("BTC", ts.portfolio.BTCAmount*0.3, "take_profit")
-		}
-		if symbol == "ETH" && ts.portfolio.ETHAmount > 0.01 {
-			return ts.executeSell("ETH", ts.portfolio.ETHAmount*0.3, "take_profit")
-		}
-	}
-
-	// Rapid drop - buy the dip
-	if changePercent < -threshold {
-		if ts.portfolio.CurrentUSD > 50 {
-			return ts.executeBuy(symbol, 50, "buy_dip")
-		}
-	}
-
-	return nil
 }
 
 // executeBuy executes a buy order (dry-run, must be called with lock held)
