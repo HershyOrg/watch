@@ -1,0 +1,32 @@
+{
+  "issues": [],
+  "warnings": [
+    "Node 'config:.claude/settings.local.json' has no edges (orphan)",
+    "Node 'file:.codex' has no edges (orphan)",
+    "Node 'file:.github/CODEOWNERS' has no edges (orphan)",
+    "Node 'config:demo/go.mod' has no edges (orphan)",
+    "Node 'config:demo/go.sum' has no edges (orphan)",
+    "Node 'file:demo/long/long' has no edges (orphan)",
+    "Node 'config:go.sum' has no edges (orphan)"
+  ],
+  "stats": {
+    "totalNodes": 637,
+    "totalEdges": 1159,
+    "totalLayers": 6,
+    "tourSteps": 5,
+    "nodeTypes": {
+      "config": 5,
+      "file": 56,
+      "function": 376,
+      "document": 7,
+      "class": 193
+    },
+    "edgeTypes": {
+      "imports": 51,
+      "contains": 569,
+      "exports": 465,
+      "documents": 21,
+      "configures": 53
+    }
+  }
+}

@@ -1,0 +1,1886 @@
+{
+  "scriptCompleted": true,
+  "name": "watch",
+  "rawDescription": "",
+  "readmeHead": "### Commit Policy\n- Commit Author는 rlaau뿐이다.\n- Claude의 공동 저작 표시를 허용하지 않는다.\n\n\n### Test Policy\n\n**모든 테스트 코드는 `test/` 디렉토리 하위에 위치해야 한다.**\n\n- 소스 패키지(`manager/`, `watch/`, `util/` 등)에 `*_test.go` 파일을 직접 두지 않는다.",
+  "languages": [
+    "css",
+    "go",
+    "html",
+    "javascript",
+    "markdown"
+  ],
+  "frameworks": [],
+  "files": [
+    {
+      "path": ".codex",
+      "language": "unknown",
+      "sizeLines": 0,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".github/CODEOWNERS",
+      "language": "unknown",
+      "sizeLines": 0,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".github/effect_test.go",
+      "language": "go",
+      "sizeLines": 335,
+      "fileCategory": "code"
+    },
+    {
+      "path": "api/handlers.go",
+      "language": "go",
+      "sizeLines": 339,
+      "fileCategory": "code"
+    },
+    {
+      "path": "api/types.go",
+      "language": "go",
+      "sizeLines": 86,
+      "fileCategory": "code"
+    },
+    {
+      "path": "CLAUDE.md",
+      "language": "markdown",
+      "sizeLines": 22,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "demo/binance/flow.go",
+      "language": "go",
+      "sizeLines": 108,
+      "fileCategory": "code"
+    },
+    {
+      "path": "demo/binance/stream.go",
+      "language": "go",
+      "sizeLines": 397,
+      "fileCategory": "code"
+    },
+    {
+      "path": "demo/example_simple_expected.txt",
+      "language": "unknown",
+      "sizeLines": 58,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "demo/example_simple.go",
+      "language": "go",
+      "sizeLines": 94,
+      "fileCategory": "code"
+    },
+    {
+      "path": "demo/example_trading_expected.txt",
+      "language": "unknown",
+      "sizeLines": 152,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "demo/example_trading.go",
+      "language": "go",
+      "sizeLines": 434,
+      "fileCategory": "code"
+    },
+    {
+      "path": "demo/example_watchcall_expected.txt",
+      "language": "unknown",
+      "sizeLines": 84,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "demo/example_watchcall.go",
+      "language": "go",
+      "sizeLines": 93,
+      "fileCategory": "code"
+    },
+    {
+      "path": "demo/go.mod",
+      "language": "unknown",
+      "sizeLines": 10,
+      "fileCategory": "config"
+    },
+    {
+      "path": "demo/go.sum",
+      "language": "unknown",
+      "sizeLines": 2,
+      "fileCategory": "config"
+    },
+    {
+      "path": "demo/logic/logic.go",
+      "language": "go",
+      "sizeLines": 138,
+      "fileCategory": "code"
+    },
+    {
+      "path": "demo/logic/trading_sim.go",
+      "language": "go",
+      "sizeLines": 530,
+      "fileCategory": "code"
+    },
+    {
+      "path": "demo/long/main.go",
+      "language": "go",
+      "sizeLines": 171,
+      "fileCategory": "code"
+    },
+    {
+      "path": "demo/long/README.md",
+      "language": "markdown",
+      "sizeLines": 291,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "demo/long/trading_sim.go",
+      "language": "go",
+      "sizeLines": 530,
+      "fileCategory": "code"
+    },
+    {
+      "path": "demo/long2/main.go",
+      "language": "go",
+      "sizeLines": 42,
+      "fileCategory": "code"
+    },
+    {
+      "path": "demo/long2/README.md",
+      "language": "markdown",
+      "sizeLines": 30,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "demo/market_client.go",
+      "language": "go",
+      "sizeLines": 98,
+      "fileCategory": "code"
+    },
+    {
+      "path": "go.mod",
+      "language": "unknown",
+      "sizeLines": 3,
+      "fileCategory": "config"
+    },
+    {
+      "path": "go.sum",
+      "language": "unknown",
+      "sizeLines": 0,
+      "fileCategory": "config"
+    },
+    {
+      "path": "kaleidoscope/.codex",
+      "language": "unknown",
+      "sizeLines": 0,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/AGENTS.md",
+      "language": "markdown",
+      "sizeLines": 205,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "kaleidoscope/analysis/diagnostics.go",
+      "language": "go",
+      "sizeLines": 115,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/analysis/model.go",
+      "language": "go",
+      "sizeLines": 161,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/analysis/session.go",
+      "language": "go",
+      "sizeLines": 57,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/analysis/system_error.go",
+      "language": "go",
+      "sizeLines": 22,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/analyzer.go",
+      "language": "go",
+      "sizeLines": 124,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/cmd/kaleidoscope/main.go",
+      "language": "go",
+      "sizeLines": 133,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/discover/run.go",
+      "language": "go",
+      "sizeLines": 151,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/discover/types_test.go",
+      "language": "go",
+      "sizeLines": 19,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/discover/types.go",
+      "language": "go",
+      "sizeLines": 19,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/docs/comment-anchor-policy.md",
+      "language": "markdown",
+      "sizeLines": 46,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "kaleidoscope/docs/reference-contract.md",
+      "language": "markdown",
+      "sizeLines": 108,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "kaleidoscope/exit",
+      "language": "unknown",
+      "sizeLines": 113,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/go.mod",
+      "language": "unknown",
+      "sizeLines": 10,
+      "fileCategory": "config"
+    },
+    {
+      "path": "kaleidoscope/go.sum",
+      "language": "unknown",
+      "sizeLines": 8,
+      "fileCategory": "config"
+    },
+    {
+      "path": "kaleidoscope/output_json_test.go",
+      "language": "go",
+      "sizeLines": 36,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/output_json.go",
+      "language": "go",
+      "sizeLines": 20,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/project/cleanup.go",
+      "language": "go",
+      "sizeLines": 140,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/project/helpers.go",
+      "language": "go",
+      "sizeLines": 186,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/project/input_test.go",
+      "language": "go",
+      "sizeLines": 34,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/project/input.go",
+      "language": "go",
+      "sizeLines": 49,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/project/mainscope.go",
+      "language": "go",
+      "sizeLines": 76,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/project/manager.go",
+      "language": "go",
+      "sizeLines": 345,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/project/message.go",
+      "language": "go",
+      "sizeLines": 106,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/project/projector.go",
+      "language": "go",
+      "sizeLines": 68,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/project/watcher.go",
+      "language": "go",
+      "sizeLines": 430,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/project/watchmachine.go",
+      "language": "go",
+      "sizeLines": 191,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/referencer/load.go",
+      "language": "go",
+      "sizeLines": 282,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/referencer/path.go",
+      "language": "go",
+      "sizeLines": 828,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/referencer/referencer_test.go",
+      "language": "go",
+      "sizeLines": 473,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/referencer/referencer.go",
+      "language": "go",
+      "sizeLines": 437,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/RULES_REPORT.md",
+      "language": "markdown",
+      "sizeLines": 359,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "kaleidoscope/rules/input.go",
+      "language": "go",
+      "sizeLines": 25,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/rules/invariant.go",
+      "language": "go",
+      "sizeLines": 33,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/rules/rule_cl_test.go",
+      "language": "go",
+      "sizeLines": 112,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/rules/rule_cl.go",
+      "language": "go",
+      "sizeLines": 112,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/rules/rule_cov.go",
+      "language": "go",
+      "sizeLines": 137,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/rules/rule_ev.go",
+      "language": "go",
+      "sizeLines": 118,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/rules/rule_ext.go",
+      "language": "go",
+      "sizeLines": 293,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/rules/rule_fr.go",
+      "language": "go",
+      "sizeLines": 88,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/rules/rule_hp_03.go",
+      "language": "go",
+      "sizeLines": 306,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/rules/rule_hp.go",
+      "language": "go",
+      "sizeLines": 284,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/rules/rule_im.go",
+      "language": "go",
+      "sizeLines": 226,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/rules/rule_mfv.go",
+      "language": "go",
+      "sizeLines": 365,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/rules/rule_mp.go",
+      "language": "go",
+      "sizeLines": 170,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/rules/rule_ni.go",
+      "language": "go",
+      "sizeLines": 102,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/rules/rule_nr.go",
+      "language": "go",
+      "sizeLines": 157,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/rules/rule_uq.go",
+      "language": "go",
+      "sizeLines": 141,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/rules/rule_wc.go",
+      "language": "go",
+      "sizeLines": 267,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/rules/rule_wfc.go",
+      "language": "go",
+      "sizeLines": 352,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/rules/runner.go",
+      "language": "go",
+      "sizeLines": 102,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/serve_internal_test.go",
+      "language": "go",
+      "sizeLines": 53,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/serve.go",
+      "language": "go",
+      "sizeLines": 403,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/util/resolve/freevars.go",
+      "language": "go",
+      "sizeLines": 513,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/util/resolve/funcs.go",
+      "language": "go",
+      "sizeLines": 287,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/util/resolve/owner.go",
+      "language": "go",
+      "sizeLines": 48,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/util/resolve/strings.go",
+      "language": "go",
+      "sizeLines": 82,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/visualizer/assets.go",
+      "language": "go",
+      "sizeLines": 19,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/visualizer/render.go",
+      "language": "go",
+      "sizeLines": 71,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/visualizer/router.go",
+      "language": "go",
+      "sizeLines": 97,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/visualizer/source_view_model.go",
+      "language": "go",
+      "sizeLines": 49,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/visualizer/source_view_test.go",
+      "language": "go",
+      "sizeLines": 95,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/visualizer/source_view.go",
+      "language": "go",
+      "sizeLines": 371,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/visualizer/static/js/app.js",
+      "language": "javascript",
+      "sizeLines": 132,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/visualizer/static/js/bootstrap.js",
+      "language": "javascript",
+      "sizeLines": 14,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/visualizer/static/js/code-viewer.js",
+      "language": "javascript",
+      "sizeLines": 187,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/visualizer/static/js/components.js",
+      "language": "javascript",
+      "sizeLines": 241,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/visualizer/static/js/graph.js",
+      "language": "javascript",
+      "sizeLines": 123,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/visualizer/static/js/routes.js",
+      "language": "javascript",
+      "sizeLines": 26,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/visualizer/static/js/services.js",
+      "language": "javascript",
+      "sizeLines": 164,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/visualizer/static/js/views.js",
+      "language": "javascript",
+      "sizeLines": 236,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/visualizer/static/styles/base.css",
+      "language": "css",
+      "sizeLines": 3,
+      "fileCategory": "markup"
+    },
+    {
+      "path": "kaleidoscope/visualizer/static/styles/code.css",
+      "language": "css",
+      "sizeLines": 24,
+      "fileCategory": "markup"
+    },
+    {
+      "path": "kaleidoscope/visualizer/static/styles/components.css",
+      "language": "css",
+      "sizeLines": 101,
+      "fileCategory": "markup"
+    },
+    {
+      "path": "kaleidoscope/visualizer/static/styles/graph.css",
+      "language": "css",
+      "sizeLines": 7,
+      "fileCategory": "markup"
+    },
+    {
+      "path": "kaleidoscope/visualizer/static/styles/tokens.css",
+      "language": "css",
+      "sizeLines": 17,
+      "fileCategory": "markup"
+    },
+    {
+      "path": "kaleidoscope/visualizer/templates/main.html",
+      "language": "html",
+      "sizeLines": 29,
+      "fileCategory": "markup"
+    },
+    {
+      "path": "kaleidoscope/watchapi/assumed_spec.go",
+      "language": "go",
+      "sizeLines": 194,
+      "fileCategory": "code"
+    },
+    {
+      "path": "kaleidoscope/watchapi/exposed_callbacks.go",
+      "language": "go",
+      "sizeLines": 339,
+      "fileCategory": "code"
+    },
+    {
+      "path": "log_and_print.go",
+      "language": "go",
+      "sizeLines": 35,
+      "fileCategory": "code"
+    },
+    {
+      "path": "manager/cleanup.go",
+      "language": "go",
+      "sizeLines": 57,
+      "fileCategory": "code"
+    },
+    {
+      "path": "manager/effect.go",
+      "language": "go",
+      "sizeLines": 74,
+      "fileCategory": "code"
+    },
+    {
+      "path": "manager/event.go",
+      "language": "go",
+      "sizeLines": 178,
+      "fileCategory": "code"
+    },
+    {
+      "path": "manager/logger.go",
+      "language": "go",
+      "sizeLines": 340,
+      "fileCategory": "code"
+    },
+    {
+      "path": "manager/m_func_runner.go",
+      "language": "go",
+      "sizeLines": 493,
+      "fileCategory": "code"
+    },
+    {
+      "path": "manager/manager_context.go",
+      "language": "go",
+      "sizeLines": 175,
+      "fileCategory": "code"
+    },
+    {
+      "path": "manager/manager.go",
+      "language": "go",
+      "sizeLines": 225,
+      "fileCategory": "code"
+    },
+    {
+      "path": "manager/reducer.go",
+      "language": "go",
+      "sizeLines": 479,
+      "fileCategory": "code"
+    },
+    {
+      "path": "manager/signal.go",
+      "language": "go",
+      "sizeLines": 102,
+      "fileCategory": "code"
+    },
+    {
+      "path": "manager/state.go",
+      "language": "go",
+      "sizeLines": 111,
+      "fileCategory": "code"
+    },
+    {
+      "path": "memo.go",
+      "language": "go",
+      "sizeLines": 76,
+      "fileCategory": "code"
+    },
+    {
+      "path": "shared/copy.go",
+      "language": "go",
+      "sizeLines": 109,
+      "fileCategory": "code"
+    },
+    {
+      "path": "shared/errors.go",
+      "language": "go",
+      "sizeLines": 36,
+      "fileCategory": "code"
+    },
+    {
+      "path": "shared/safe_queue.go",
+      "language": "go",
+      "sizeLines": 54,
+      "fileCategory": "code"
+    },
+    {
+      "path": "shared/safemap.go",
+      "language": "go",
+      "sizeLines": 67,
+      "fileCategory": "code"
+    },
+    {
+      "path": "shared/types.go",
+      "language": "go",
+      "sizeLines": 636,
+      "fileCategory": "code"
+    },
+    {
+      "path": "TEST_STRATEGY.md",
+      "language": "markdown",
+      "sizeLines": 304,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "types.go",
+      "language": "go",
+      "sizeLines": 72,
+      "fileCategory": "code"
+    },
+    {
+      "path": "watch_tick.go",
+      "language": "go",
+      "sizeLines": 44,
+      "fileCategory": "code"
+    },
+    {
+      "path": "watch.go",
+      "language": "go",
+      "sizeLines": 200,
+      "fileCategory": "code"
+    },
+    {
+      "path": "watcher_api.go",
+      "language": "go",
+      "sizeLines": 302,
+      "fileCategory": "code"
+    },
+    {
+      "path": "watcher_wait.go",
+      "language": "go",
+      "sizeLines": 188,
+      "fileCategory": "code"
+    },
+    {
+      "path": "watcher.go",
+      "language": "go",
+      "sizeLines": 416,
+      "fileCategory": "code"
+    },
+    {
+      "path": "wm/history_snapshot.go",
+      "language": "go",
+      "sizeLines": 165,
+      "fileCategory": "code"
+    },
+    {
+      "path": "wm/loop_context.go",
+      "language": "go",
+      "sizeLines": 34,
+      "fileCategory": "code"
+    },
+    {
+      "path": "wm/loop_effect_driven_event.go",
+      "language": "go",
+      "sizeLines": 62,
+      "fileCategory": "code"
+    },
+    {
+      "path": "wm/loop_effect.go",
+      "language": "go",
+      "sizeLines": 31,
+      "fileCategory": "code"
+    },
+    {
+      "path": "wm/loop_queued_event.go",
+      "language": "go",
+      "sizeLines": 77,
+      "fileCategory": "code"
+    },
+    {
+      "path": "wm/loop_reducer.go",
+      "language": "go",
+      "sizeLines": 123,
+      "fileCategory": "code"
+    },
+    {
+      "path": "wm/loop_state.go",
+      "language": "go",
+      "sizeLines": 45,
+      "fileCategory": "code"
+    },
+    {
+      "path": "wm/marker.go",
+      "language": "go",
+      "sizeLines": 37,
+      "fileCategory": "code"
+    },
+    {
+      "path": "wm/pb_checker.go",
+      "language": "go",
+      "sizeLines": 11,
+      "fileCategory": "code"
+    },
+    {
+      "path": "wm/recovery_policy.go",
+      "language": "go",
+      "sizeLines": 65,
+      "fileCategory": "code"
+    },
+    {
+      "path": "wm/watch_loop.go",
+      "language": "go",
+      "sizeLines": 455,
+      "fileCategory": "code"
+    },
+    {
+      "path": "wm/watch_raw.go",
+      "language": "go",
+      "sizeLines": 28,
+      "fileCategory": "code"
+    },
+    {
+      "path": "wm/watch_typed.go",
+      "language": "go",
+      "sizeLines": 29,
+      "fileCategory": "code"
+    },
+    {
+      "path": "wm/wm_mgr_interface.go",
+      "language": "go",
+      "sizeLines": 23,
+      "fileCategory": "code"
+    },
+    {
+      "path": "wm/wm_watchmachine_interface.go",
+      "language": "go",
+      "sizeLines": 10,
+      "fileCategory": "code"
+    },
+    {
+      "path": "wm/wm.go",
+      "language": "go",
+      "sizeLines": 237,
+      "fileCategory": "code"
+    }
+  ],
+  "totalFiles": 146,
+  "filteredByIgnore": 101,
+  "estimatedComplexity": "moderate",
+  "importMap": {
+    ".codex": [],
+    ".github/CODEOWNERS": [],
+    ".github/effect_test.go": [
+      "manager/cleanup.go",
+      "manager/effect.go",
+      "manager/event.go",
+      "manager/logger.go",
+      "manager/m_func_runner.go",
+      "manager/manager.go",
+      "manager/manager_context.go",
+      "manager/reducer.go",
+      "manager/signal.go",
+      "manager/state.go",
+      "shared/copy.go",
+      "shared/errors.go",
+      "shared/safe_queue.go",
+      "shared/safemap.go",
+      "shared/types.go"
+    ],
+    "CLAUDE.md": [],
+    "TEST_STRATEGY.md": [],
+    "api/handlers.go": [],
+    "api/types.go": [],
+    "demo/binance/flow.go": [
+      "shared/copy.go",
+      "shared/errors.go",
+      "shared/safe_queue.go",
+      "shared/safemap.go",
+      "shared/types.go",
+      "wm/history_snapshot.go",
+      "wm/loop_context.go",
+      "wm/loop_effect.go",
+      "wm/loop_effect_driven_event.go",
+      "wm/loop_queued_event.go",
+      "wm/loop_reducer.go",
+      "wm/loop_state.go",
+      "wm/marker.go",
+      "wm/pb_checker.go",
+      "wm/recovery_policy.go",
+      "wm/watch_loop.go",
+      "wm/watch_raw.go",
+      "wm/watch_typed.go",
+      "wm/wm.go",
+      "wm/wm_mgr_interface.go",
+      "wm/wm_watchmachine_interface.go"
+    ],
+    "demo/binance/stream.go": [],
+    "demo/example_simple.go": [
+      "log_and_print.go",
+      "memo.go",
+      "types.go",
+      "watch.go",
+      "watch_tick.go",
+      "watcher.go",
+      "watcher_api.go",
+      "watcher_wait.go"
+    ],
+    "demo/example_simple_expected.txt": [],
+    "demo/example_trading.go": [
+      "log_and_print.go",
+      "memo.go",
+      "shared/copy.go",
+      "shared/errors.go",
+      "shared/safe_queue.go",
+      "shared/safemap.go",
+      "shared/types.go",
+      "types.go",
+      "watch.go",
+      "watch_tick.go",
+      "watcher.go",
+      "watcher_api.go",
+      "watcher_wait.go",
+      "wm/history_snapshot.go",
+      "wm/loop_context.go",
+      "wm/loop_effect.go",
+      "wm/loop_effect_driven_event.go",
+      "wm/loop_queued_event.go",
+      "wm/loop_reducer.go",
+      "wm/loop_state.go",
+      "wm/marker.go",
+      "wm/pb_checker.go",
+      "wm/recovery_policy.go",
+      "wm/watch_loop.go",
+      "wm/watch_raw.go",
+      "wm/watch_typed.go",
+      "wm/wm.go",
+      "wm/wm_mgr_interface.go",
+      "wm/wm_watchmachine_interface.go"
+    ],
+    "demo/example_trading_expected.txt": [],
+    "demo/example_watchcall.go": [
+      "log_and_print.go",
+      "memo.go",
+      "shared/copy.go",
+      "shared/errors.go",
+      "shared/safe_queue.go",
+      "shared/safemap.go",
+      "shared/types.go",
+      "types.go",
+      "watch.go",
+      "watch_tick.go",
+      "watcher.go",
+      "watcher_api.go",
+      "watcher_wait.go",
+      "wm/history_snapshot.go",
+      "wm/loop_context.go",
+      "wm/loop_effect.go",
+      "wm/loop_effect_driven_event.go",
+      "wm/loop_queued_event.go",
+      "wm/loop_reducer.go",
+      "wm/loop_state.go",
+      "wm/marker.go",
+      "wm/pb_checker.go",
+      "wm/recovery_policy.go",
+      "wm/watch_loop.go",
+      "wm/watch_raw.go",
+      "wm/watch_typed.go",
+      "wm/wm.go",
+      "wm/wm_mgr_interface.go",
+      "wm/wm_watchmachine_interface.go"
+    ],
+    "demo/example_watchcall_expected.txt": [],
+    "demo/go.mod": [],
+    "demo/go.sum": [],
+    "demo/logic/logic.go": [
+      "demo/binance/flow.go",
+      "demo/binance/stream.go",
+      "log_and_print.go",
+      "memo.go",
+      "types.go",
+      "watch.go",
+      "watch_tick.go",
+      "watcher.go",
+      "watcher_api.go",
+      "watcher_wait.go"
+    ],
+    "demo/logic/trading_sim.go": [],
+    "demo/long/README.md": [],
+    "demo/long/main.go": [
+      "demo/binance/flow.go",
+      "demo/binance/stream.go",
+      "log_and_print.go",
+      "memo.go",
+      "types.go",
+      "watch.go",
+      "watch_tick.go",
+      "watcher.go",
+      "watcher_api.go",
+      "watcher_wait.go"
+    ],
+    "demo/long/trading_sim.go": [],
+    "demo/long2/README.md": [],
+    "demo/long2/main.go": [
+      "demo/logic/logic.go",
+      "demo/logic/trading_sim.go",
+      "log_and_print.go",
+      "memo.go",
+      "types.go",
+      "watch.go",
+      "watch_tick.go",
+      "watcher.go",
+      "watcher_api.go",
+      "watcher_wait.go"
+    ],
+    "demo/market_client.go": [],
+    "go.mod": [],
+    "go.sum": [],
+    "kaleidoscope/.codex": [],
+    "kaleidoscope/AGENTS.md": [],
+    "kaleidoscope/RULES_REPORT.md": [],
+    "kaleidoscope/analysis/diagnostics.go": [],
+    "kaleidoscope/analysis/model.go": [
+      "kaleidoscope/referencer/load.go",
+      "kaleidoscope/referencer/path.go",
+      "kaleidoscope/referencer/referencer.go"
+    ],
+    "kaleidoscope/analysis/session.go": [
+      "kaleidoscope/referencer/load.go",
+      "kaleidoscope/referencer/path.go",
+      "kaleidoscope/referencer/referencer.go"
+    ],
+    "kaleidoscope/analysis/system_error.go": [],
+    "kaleidoscope/analyzer.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go",
+      "kaleidoscope/discover/run.go",
+      "kaleidoscope/discover/types.go",
+      "kaleidoscope/project/cleanup.go",
+      "kaleidoscope/project/helpers.go",
+      "kaleidoscope/project/input.go",
+      "kaleidoscope/project/mainscope.go",
+      "kaleidoscope/project/manager.go",
+      "kaleidoscope/project/message.go",
+      "kaleidoscope/project/projector.go",
+      "kaleidoscope/project/watcher.go",
+      "kaleidoscope/project/watchmachine.go",
+      "kaleidoscope/referencer/load.go",
+      "kaleidoscope/referencer/path.go",
+      "kaleidoscope/referencer/referencer.go",
+      "kaleidoscope/rules/input.go",
+      "kaleidoscope/rules/invariant.go",
+      "kaleidoscope/rules/rule_cl.go",
+      "kaleidoscope/rules/rule_cov.go",
+      "kaleidoscope/rules/rule_ev.go",
+      "kaleidoscope/rules/rule_ext.go",
+      "kaleidoscope/rules/rule_fr.go",
+      "kaleidoscope/rules/rule_hp.go",
+      "kaleidoscope/rules/rule_hp_03.go",
+      "kaleidoscope/rules/rule_im.go",
+      "kaleidoscope/rules/rule_mfv.go",
+      "kaleidoscope/rules/rule_mp.go",
+      "kaleidoscope/rules/rule_ni.go",
+      "kaleidoscope/rules/rule_nr.go",
+      "kaleidoscope/rules/rule_uq.go",
+      "kaleidoscope/rules/rule_wc.go",
+      "kaleidoscope/rules/rule_wfc.go",
+      "kaleidoscope/rules/runner.go"
+    ],
+    "kaleidoscope/cmd/kaleidoscope/main.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go",
+      "kaleidoscope/analyzer.go",
+      "kaleidoscope/output_json.go",
+      "kaleidoscope/referencer/load.go",
+      "kaleidoscope/referencer/path.go",
+      "kaleidoscope/referencer/referencer.go",
+      "kaleidoscope/serve.go"
+    ],
+    "kaleidoscope/discover/run.go": [
+      "kaleidoscope/referencer/load.go",
+      "kaleidoscope/referencer/path.go",
+      "kaleidoscope/referencer/referencer.go",
+      "kaleidoscope/util/resolve/freevars.go",
+      "kaleidoscope/util/resolve/funcs.go",
+      "kaleidoscope/util/resolve/owner.go",
+      "kaleidoscope/util/resolve/strings.go",
+      "kaleidoscope/watchapi/assumed_spec.go",
+      "kaleidoscope/watchapi/exposed_callbacks.go"
+    ],
+    "kaleidoscope/discover/types.go": [
+      "kaleidoscope/watchapi/assumed_spec.go",
+      "kaleidoscope/watchapi/exposed_callbacks.go"
+    ],
+    "kaleidoscope/discover/types_test.go": [
+      "kaleidoscope/watchapi/assumed_spec.go",
+      "kaleidoscope/watchapi/exposed_callbacks.go"
+    ],
+    "kaleidoscope/docs/comment-anchor-policy.md": [],
+    "kaleidoscope/docs/reference-contract.md": [],
+    "kaleidoscope/exit": [],
+    "kaleidoscope/go.mod": [],
+    "kaleidoscope/go.sum": [],
+    "kaleidoscope/output_json.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go"
+    ],
+    "kaleidoscope/output_json_test.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go"
+    ],
+    "kaleidoscope/project/cleanup.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go",
+      "kaleidoscope/discover/run.go",
+      "kaleidoscope/discover/types.go",
+      "kaleidoscope/util/resolve/freevars.go",
+      "kaleidoscope/util/resolve/funcs.go",
+      "kaleidoscope/util/resolve/owner.go",
+      "kaleidoscope/util/resolve/strings.go",
+      "kaleidoscope/watchapi/assumed_spec.go",
+      "kaleidoscope/watchapi/exposed_callbacks.go"
+    ],
+    "kaleidoscope/project/helpers.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go",
+      "kaleidoscope/referencer/load.go",
+      "kaleidoscope/referencer/path.go",
+      "kaleidoscope/referencer/referencer.go",
+      "kaleidoscope/util/resolve/freevars.go",
+      "kaleidoscope/util/resolve/funcs.go",
+      "kaleidoscope/util/resolve/owner.go",
+      "kaleidoscope/util/resolve/strings.go"
+    ],
+    "kaleidoscope/project/input.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go",
+      "kaleidoscope/discover/run.go",
+      "kaleidoscope/discover/types.go",
+      "kaleidoscope/referencer/load.go",
+      "kaleidoscope/referencer/path.go",
+      "kaleidoscope/referencer/referencer.go"
+    ],
+    "kaleidoscope/project/input_test.go": [
+      "kaleidoscope/referencer/load.go",
+      "kaleidoscope/referencer/path.go",
+      "kaleidoscope/referencer/referencer.go"
+    ],
+    "kaleidoscope/project/mainscope.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go",
+      "kaleidoscope/util/resolve/freevars.go",
+      "kaleidoscope/util/resolve/funcs.go",
+      "kaleidoscope/util/resolve/owner.go",
+      "kaleidoscope/util/resolve/strings.go",
+      "kaleidoscope/watchapi/assumed_spec.go",
+      "kaleidoscope/watchapi/exposed_callbacks.go"
+    ],
+    "kaleidoscope/project/manager.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go",
+      "kaleidoscope/discover/run.go",
+      "kaleidoscope/discover/types.go",
+      "kaleidoscope/referencer/load.go",
+      "kaleidoscope/referencer/path.go",
+      "kaleidoscope/referencer/referencer.go",
+      "kaleidoscope/util/resolve/freevars.go",
+      "kaleidoscope/util/resolve/funcs.go",
+      "kaleidoscope/util/resolve/owner.go",
+      "kaleidoscope/util/resolve/strings.go",
+      "kaleidoscope/watchapi/assumed_spec.go",
+      "kaleidoscope/watchapi/exposed_callbacks.go"
+    ],
+    "kaleidoscope/project/message.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go"
+    ],
+    "kaleidoscope/project/projector.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go"
+    ],
+    "kaleidoscope/project/watcher.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go",
+      "kaleidoscope/discover/run.go",
+      "kaleidoscope/discover/types.go",
+      "kaleidoscope/referencer/load.go",
+      "kaleidoscope/referencer/path.go",
+      "kaleidoscope/referencer/referencer.go",
+      "kaleidoscope/util/resolve/freevars.go",
+      "kaleidoscope/util/resolve/funcs.go",
+      "kaleidoscope/util/resolve/owner.go",
+      "kaleidoscope/util/resolve/strings.go",
+      "kaleidoscope/watchapi/assumed_spec.go",
+      "kaleidoscope/watchapi/exposed_callbacks.go"
+    ],
+    "kaleidoscope/project/watchmachine.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go",
+      "kaleidoscope/discover/run.go",
+      "kaleidoscope/discover/types.go",
+      "kaleidoscope/util/resolve/freevars.go",
+      "kaleidoscope/util/resolve/funcs.go",
+      "kaleidoscope/util/resolve/owner.go",
+      "kaleidoscope/util/resolve/strings.go",
+      "kaleidoscope/watchapi/assumed_spec.go",
+      "kaleidoscope/watchapi/exposed_callbacks.go"
+    ],
+    "kaleidoscope/referencer/load.go": [
+      "kaleidoscope/watchapi/assumed_spec.go",
+      "kaleidoscope/watchapi/exposed_callbacks.go"
+    ],
+    "kaleidoscope/referencer/path.go": [],
+    "kaleidoscope/referencer/referencer.go": [],
+    "kaleidoscope/referencer/referencer_test.go": [],
+    "kaleidoscope/rules/input.go": [
+      "kaleidoscope/discover/run.go",
+      "kaleidoscope/discover/types.go",
+      "kaleidoscope/referencer/load.go",
+      "kaleidoscope/referencer/path.go",
+      "kaleidoscope/referencer/referencer.go"
+    ],
+    "kaleidoscope/rules/invariant.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go",
+      "kaleidoscope/referencer/load.go",
+      "kaleidoscope/referencer/path.go",
+      "kaleidoscope/referencer/referencer.go"
+    ],
+    "kaleidoscope/rules/rule_cl.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go",
+      "kaleidoscope/discover/run.go",
+      "kaleidoscope/discover/types.go",
+      "kaleidoscope/watchapi/assumed_spec.go",
+      "kaleidoscope/watchapi/exposed_callbacks.go"
+    ],
+    "kaleidoscope/rules/rule_cl_test.go": [
+      "kaleidoscope/discover/run.go",
+      "kaleidoscope/discover/types.go",
+      "kaleidoscope/watchapi/assumed_spec.go",
+      "kaleidoscope/watchapi/exposed_callbacks.go"
+    ],
+    "kaleidoscope/rules/rule_cov.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go",
+      "kaleidoscope/discover/run.go",
+      "kaleidoscope/discover/types.go",
+      "kaleidoscope/watchapi/assumed_spec.go",
+      "kaleidoscope/watchapi/exposed_callbacks.go"
+    ],
+    "kaleidoscope/rules/rule_ev.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go",
+      "kaleidoscope/util/resolve/freevars.go",
+      "kaleidoscope/util/resolve/funcs.go",
+      "kaleidoscope/util/resolve/owner.go",
+      "kaleidoscope/util/resolve/strings.go",
+      "kaleidoscope/watchapi/assumed_spec.go",
+      "kaleidoscope/watchapi/exposed_callbacks.go"
+    ],
+    "kaleidoscope/rules/rule_ext.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go",
+      "kaleidoscope/referencer/load.go",
+      "kaleidoscope/referencer/path.go",
+      "kaleidoscope/referencer/referencer.go",
+      "kaleidoscope/watchapi/assumed_spec.go",
+      "kaleidoscope/watchapi/exposed_callbacks.go"
+    ],
+    "kaleidoscope/rules/rule_fr.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go",
+      "kaleidoscope/util/resolve/freevars.go",
+      "kaleidoscope/util/resolve/funcs.go",
+      "kaleidoscope/util/resolve/owner.go",
+      "kaleidoscope/util/resolve/strings.go",
+      "kaleidoscope/watchapi/assumed_spec.go",
+      "kaleidoscope/watchapi/exposed_callbacks.go"
+    ],
+    "kaleidoscope/rules/rule_hp.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go",
+      "kaleidoscope/discover/run.go",
+      "kaleidoscope/discover/types.go",
+      "kaleidoscope/referencer/load.go",
+      "kaleidoscope/referencer/path.go",
+      "kaleidoscope/referencer/referencer.go",
+      "kaleidoscope/util/resolve/freevars.go",
+      "kaleidoscope/util/resolve/funcs.go",
+      "kaleidoscope/util/resolve/owner.go",
+      "kaleidoscope/util/resolve/strings.go",
+      "kaleidoscope/watchapi/assumed_spec.go",
+      "kaleidoscope/watchapi/exposed_callbacks.go"
+    ],
+    "kaleidoscope/rules/rule_hp_03.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go",
+      "kaleidoscope/discover/run.go",
+      "kaleidoscope/discover/types.go",
+      "kaleidoscope/watchapi/assumed_spec.go",
+      "kaleidoscope/watchapi/exposed_callbacks.go"
+    ],
+    "kaleidoscope/rules/rule_im.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go",
+      "kaleidoscope/watchapi/assumed_spec.go",
+      "kaleidoscope/watchapi/exposed_callbacks.go"
+    ],
+    "kaleidoscope/rules/rule_mfv.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go",
+      "kaleidoscope/discover/run.go",
+      "kaleidoscope/discover/types.go",
+      "kaleidoscope/referencer/load.go",
+      "kaleidoscope/referencer/path.go",
+      "kaleidoscope/referencer/referencer.go",
+      "kaleidoscope/util/resolve/freevars.go",
+      "kaleidoscope/util/resolve/funcs.go",
+      "kaleidoscope/util/resolve/owner.go",
+      "kaleidoscope/util/resolve/strings.go",
+      "kaleidoscope/watchapi/assumed_spec.go",
+      "kaleidoscope/watchapi/exposed_callbacks.go"
+    ],
+    "kaleidoscope/rules/rule_mp.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go",
+      "kaleidoscope/util/resolve/freevars.go",
+      "kaleidoscope/util/resolve/funcs.go",
+      "kaleidoscope/util/resolve/owner.go",
+      "kaleidoscope/util/resolve/strings.go",
+      "kaleidoscope/watchapi/assumed_spec.go",
+      "kaleidoscope/watchapi/exposed_callbacks.go"
+    ],
+    "kaleidoscope/rules/rule_ni.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go",
+      "kaleidoscope/util/resolve/freevars.go",
+      "kaleidoscope/util/resolve/funcs.go",
+      "kaleidoscope/util/resolve/owner.go",
+      "kaleidoscope/util/resolve/strings.go",
+      "kaleidoscope/watchapi/assumed_spec.go",
+      "kaleidoscope/watchapi/exposed_callbacks.go"
+    ],
+    "kaleidoscope/rules/rule_nr.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go",
+      "kaleidoscope/referencer/load.go",
+      "kaleidoscope/referencer/path.go",
+      "kaleidoscope/referencer/referencer.go",
+      "kaleidoscope/util/resolve/freevars.go",
+      "kaleidoscope/util/resolve/funcs.go",
+      "kaleidoscope/util/resolve/owner.go",
+      "kaleidoscope/util/resolve/strings.go",
+      "kaleidoscope/watchapi/assumed_spec.go",
+      "kaleidoscope/watchapi/exposed_callbacks.go"
+    ],
+    "kaleidoscope/rules/rule_uq.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go",
+      "kaleidoscope/discover/run.go",
+      "kaleidoscope/discover/types.go",
+      "kaleidoscope/referencer/load.go",
+      "kaleidoscope/referencer/path.go",
+      "kaleidoscope/referencer/referencer.go",
+      "kaleidoscope/util/resolve/freevars.go",
+      "kaleidoscope/util/resolve/funcs.go",
+      "kaleidoscope/util/resolve/owner.go",
+      "kaleidoscope/util/resolve/strings.go",
+      "kaleidoscope/watchapi/assumed_spec.go",
+      "kaleidoscope/watchapi/exposed_callbacks.go"
+    ],
+    "kaleidoscope/rules/rule_wc.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go",
+      "kaleidoscope/watchapi/assumed_spec.go",
+      "kaleidoscope/watchapi/exposed_callbacks.go"
+    ],
+    "kaleidoscope/rules/rule_wfc.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go",
+      "kaleidoscope/watchapi/assumed_spec.go",
+      "kaleidoscope/watchapi/exposed_callbacks.go"
+    ],
+    "kaleidoscope/rules/runner.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go"
+    ],
+    "kaleidoscope/serve.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go",
+      "kaleidoscope/referencer/load.go",
+      "kaleidoscope/referencer/path.go",
+      "kaleidoscope/referencer/referencer.go",
+      "kaleidoscope/visualizer/assets.go",
+      "kaleidoscope/visualizer/render.go",
+      "kaleidoscope/visualizer/router.go",
+      "kaleidoscope/visualizer/source_view.go",
+      "kaleidoscope/visualizer/source_view_model.go"
+    ],
+    "kaleidoscope/serve_internal_test.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go",
+      "kaleidoscope/visualizer/assets.go",
+      "kaleidoscope/visualizer/render.go",
+      "kaleidoscope/visualizer/router.go",
+      "kaleidoscope/visualizer/source_view.go",
+      "kaleidoscope/visualizer/source_view_model.go"
+    ],
+    "kaleidoscope/util/resolve/freevars.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go",
+      "kaleidoscope/referencer/load.go",
+      "kaleidoscope/referencer/path.go",
+      "kaleidoscope/referencer/referencer.go"
+    ],
+    "kaleidoscope/util/resolve/funcs.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go"
+    ],
+    "kaleidoscope/util/resolve/owner.go": [],
+    "kaleidoscope/util/resolve/strings.go": [],
+    "kaleidoscope/visualizer/assets.go": [],
+    "kaleidoscope/visualizer/render.go": [
+      "kaleidoscope/analysis/diagnostics.go",
+      "kaleidoscope/analysis/model.go",
+      "kaleidoscope/analysis/session.go",
+      "kaleidoscope/analysis/system_error.go"
+    ],
+    "kaleidoscope/visualizer/router.go": [],
+    "kaleidoscope/visualizer/source_view.go": [],
+    "kaleidoscope/visualizer/source_view_model.go": [
+      "kaleidoscope/referencer/load.go",
+      "kaleidoscope/referencer/path.go",
+      "kaleidoscope/referencer/referencer.go"
+    ],
+    "kaleidoscope/visualizer/source_view_test.go": [
+      "kaleidoscope/referencer/load.go",
+      "kaleidoscope/referencer/path.go",
+      "kaleidoscope/referencer/referencer.go"
+    ],
+    "kaleidoscope/visualizer/static/js/app.js": [],
+    "kaleidoscope/visualizer/static/js/bootstrap.js": [],
+    "kaleidoscope/visualizer/static/js/code-viewer.js": [],
+    "kaleidoscope/visualizer/static/js/components.js": [],
+    "kaleidoscope/visualizer/static/js/graph.js": [],
+    "kaleidoscope/visualizer/static/js/routes.js": [],
+    "kaleidoscope/visualizer/static/js/services.js": [],
+    "kaleidoscope/visualizer/static/js/views.js": [],
+    "kaleidoscope/visualizer/static/styles/base.css": [],
+    "kaleidoscope/visualizer/static/styles/code.css": [],
+    "kaleidoscope/visualizer/static/styles/components.css": [],
+    "kaleidoscope/visualizer/static/styles/graph.css": [],
+    "kaleidoscope/visualizer/static/styles/tokens.css": [],
+    "kaleidoscope/visualizer/templates/main.html": [],
+    "kaleidoscope/watchapi/assumed_spec.go": [],
+    "kaleidoscope/watchapi/exposed_callbacks.go": [],
+    "log_and_print.go": [
+      "manager/cleanup.go",
+      "manager/effect.go",
+      "manager/event.go",
+      "manager/logger.go",
+      "manager/m_func_runner.go",
+      "manager/manager.go",
+      "manager/manager_context.go",
+      "manager/reducer.go",
+      "manager/signal.go",
+      "manager/state.go",
+      "shared/copy.go",
+      "shared/errors.go",
+      "shared/safe_queue.go",
+      "shared/safemap.go",
+      "shared/types.go"
+    ],
+    "manager/cleanup.go": [
+      "shared/copy.go",
+      "shared/errors.go",
+      "shared/safe_queue.go",
+      "shared/safemap.go",
+      "shared/types.go"
+    ],
+    "manager/effect.go": [
+      "shared/copy.go",
+      "shared/errors.go",
+      "shared/safe_queue.go",
+      "shared/safemap.go",
+      "shared/types.go"
+    ],
+    "manager/event.go": [
+      "shared/copy.go",
+      "shared/errors.go",
+      "shared/safe_queue.go",
+      "shared/safemap.go",
+      "shared/types.go"
+    ],
+    "manager/logger.go": [
+      "shared/copy.go",
+      "shared/errors.go",
+      "shared/safe_queue.go",
+      "shared/safemap.go",
+      "shared/types.go"
+    ],
+    "manager/m_func_runner.go": [
+      "shared/copy.go",
+      "shared/errors.go",
+      "shared/safe_queue.go",
+      "shared/safemap.go",
+      "shared/types.go"
+    ],
+    "manager/manager.go": [
+      "shared/copy.go",
+      "shared/errors.go",
+      "shared/safe_queue.go",
+      "shared/safemap.go",
+      "shared/types.go",
+      "wm/history_snapshot.go",
+      "wm/loop_context.go",
+      "wm/loop_effect.go",
+      "wm/loop_effect_driven_event.go",
+      "wm/loop_queued_event.go",
+      "wm/loop_reducer.go",
+      "wm/loop_state.go",
+      "wm/marker.go",
+      "wm/pb_checker.go",
+      "wm/recovery_policy.go",
+      "wm/watch_loop.go",
+      "wm/watch_raw.go",
+      "wm/watch_typed.go",
+      "wm/wm.go",
+      "wm/wm_mgr_interface.go",
+      "wm/wm_watchmachine_interface.go"
+    ],
+    "manager/manager_context.go": [
+      "shared/copy.go",
+      "shared/errors.go",
+      "shared/safe_queue.go",
+      "shared/safemap.go",
+      "shared/types.go"
+    ],
+    "manager/reducer.go": [
+      "shared/copy.go",
+      "shared/errors.go",
+      "shared/safe_queue.go",
+      "shared/safemap.go",
+      "shared/types.go",
+      "wm/history_snapshot.go",
+      "wm/loop_context.go",
+      "wm/loop_effect.go",
+      "wm/loop_effect_driven_event.go",
+      "wm/loop_queued_event.go",
+      "wm/loop_reducer.go",
+      "wm/loop_state.go",
+      "wm/marker.go",
+      "wm/pb_checker.go",
+      "wm/recovery_policy.go",
+      "wm/watch_loop.go",
+      "wm/watch_raw.go",
+      "wm/watch_typed.go",
+      "wm/wm.go",
+      "wm/wm_mgr_interface.go",
+      "wm/wm_watchmachine_interface.go"
+    ],
+    "manager/signal.go": [
+      "shared/copy.go",
+      "shared/errors.go",
+      "shared/safe_queue.go",
+      "shared/safemap.go",
+      "shared/types.go"
+    ],
+    "manager/state.go": [
+      "shared/copy.go",
+      "shared/errors.go",
+      "shared/safe_queue.go",
+      "shared/safemap.go",
+      "shared/types.go"
+    ],
+    "memo.go": [],
+    "shared/copy.go": [],
+    "shared/errors.go": [],
+    "shared/safe_queue.go": [],
+    "shared/safemap.go": [],
+    "shared/types.go": [],
+    "types.go": [
+      "shared/copy.go",
+      "shared/errors.go",
+      "shared/safe_queue.go",
+      "shared/safemap.go",
+      "shared/types.go"
+    ],
+    "watch.go": [
+      "manager/cleanup.go",
+      "manager/effect.go",
+      "manager/event.go",
+      "manager/logger.go",
+      "manager/m_func_runner.go",
+      "manager/manager.go",
+      "manager/manager_context.go",
+      "manager/reducer.go",
+      "manager/signal.go",
+      "manager/state.go",
+      "shared/copy.go",
+      "shared/errors.go",
+      "shared/safe_queue.go",
+      "shared/safemap.go",
+      "shared/types.go",
+      "wm/history_snapshot.go",
+      "wm/loop_context.go",
+      "wm/loop_effect.go",
+      "wm/loop_effect_driven_event.go",
+      "wm/loop_queued_event.go",
+      "wm/loop_reducer.go",
+      "wm/loop_state.go",
+      "wm/marker.go",
+      "wm/pb_checker.go",
+      "wm/recovery_policy.go",
+      "wm/watch_loop.go",
+      "wm/watch_raw.go",
+      "wm/watch_typed.go",
+      "wm/wm.go",
+      "wm/wm_mgr_interface.go",
+      "wm/wm_watchmachine_interface.go"
+    ],
+    "watch_tick.go": [
+      "shared/copy.go",
+      "shared/errors.go",
+      "shared/safe_queue.go",
+      "shared/safemap.go",
+      "shared/types.go",
+      "wm/history_snapshot.go",
+      "wm/loop_context.go",
+      "wm/loop_effect.go",
+      "wm/loop_effect_driven_event.go",
+      "wm/loop_queued_event.go",
+      "wm/loop_reducer.go",
+      "wm/loop_state.go",
+      "wm/marker.go",
+      "wm/pb_checker.go",
+      "wm/recovery_policy.go",
+      "wm/watch_loop.go",
+      "wm/watch_raw.go",
+      "wm/watch_typed.go",
+      "wm/wm.go",
+      "wm/wm_mgr_interface.go",
+      "wm/wm_watchmachine_interface.go"
+    ],
+    "watcher.go": [
+      "manager/cleanup.go",
+      "manager/effect.go",
+      "manager/event.go",
+      "manager/logger.go",
+      "manager/m_func_runner.go",
+      "manager/manager.go",
+      "manager/manager_context.go",
+      "manager/reducer.go",
+      "manager/signal.go",
+      "manager/state.go",
+      "shared/copy.go",
+      "shared/errors.go",
+      "shared/safe_queue.go",
+      "shared/safemap.go",
+      "shared/types.go",
+      "wm/history_snapshot.go",
+      "wm/loop_context.go",
+      "wm/loop_effect.go",
+      "wm/loop_effect_driven_event.go",
+      "wm/loop_queued_event.go",
+      "wm/loop_reducer.go",
+      "wm/loop_state.go",
+      "wm/marker.go",
+      "wm/pb_checker.go",
+      "wm/recovery_policy.go",
+      "wm/watch_loop.go",
+      "wm/watch_raw.go",
+      "wm/watch_typed.go",
+      "wm/wm.go",
+      "wm/wm_mgr_interface.go",
+      "wm/wm_watchmachine_interface.go"
+    ],
+    "watcher_api.go": [
+      "api/handlers.go",
+      "api/types.go",
+      "manager/cleanup.go",
+      "manager/effect.go",
+      "manager/event.go",
+      "manager/logger.go",
+      "manager/m_func_runner.go",
+      "manager/manager.go",
+      "manager/manager_context.go",
+      "manager/reducer.go",
+      "manager/signal.go",
+      "manager/state.go",
+      "shared/copy.go",
+      "shared/errors.go",
+      "shared/safe_queue.go",
+      "shared/safemap.go",
+      "shared/types.go",
+      "wm/history_snapshot.go",
+      "wm/loop_context.go",
+      "wm/loop_effect.go",
+      "wm/loop_effect_driven_event.go",
+      "wm/loop_queued_event.go",
+      "wm/loop_reducer.go",
+      "wm/loop_state.go",
+      "wm/marker.go",
+      "wm/pb_checker.go",
+      "wm/recovery_policy.go",
+      "wm/watch_loop.go",
+      "wm/watch_raw.go",
+      "wm/watch_typed.go",
+      "wm/wm.go",
+      "wm/wm_mgr_interface.go",
+      "wm/wm_watchmachine_interface.go"
+    ],
+    "watcher_wait.go": [],
+    "wm/history_snapshot.go": [
+      "shared/copy.go",
+      "shared/errors.go",
+      "shared/safe_queue.go",
+      "shared/safemap.go",
+      "shared/types.go"
+    ],
+    "wm/loop_context.go": [],
+    "wm/loop_effect.go": [],
+    "wm/loop_effect_driven_event.go": [],
+    "wm/loop_queued_event.go": [
+      "shared/copy.go",
+      "shared/errors.go",
+      "shared/safe_queue.go",
+      "shared/safemap.go",
+      "shared/types.go"
+    ],
+    "wm/loop_reducer.go": [],
+    "wm/loop_state.go": [],
+    "wm/marker.go": [],
+    "wm/pb_checker.go": [],
+    "wm/recovery_policy.go": [],
+    "wm/watch_loop.go": [
+      "shared/copy.go",
+      "shared/errors.go",
+      "shared/safe_queue.go",
+      "shared/safemap.go",
+      "shared/types.go"
+    ],
+    "wm/watch_raw.go": [
+      "shared/copy.go",
+      "shared/errors.go",
+      "shared/safe_queue.go",
+      "shared/safemap.go",
+      "shared/types.go"
+    ],
+    "wm/watch_typed.go": [
+      "shared/copy.go",
+      "shared/errors.go",
+      "shared/safe_queue.go",
+      "shared/safemap.go",
+      "shared/types.go"
+    ],
+    "wm/wm.go": [
+      "shared/copy.go",
+      "shared/errors.go",
+      "shared/safe_queue.go",
+      "shared/safemap.go",
+      "shared/types.go"
+    ],
+    "wm/wm_mgr_interface.go": [
+      "shared/copy.go",
+      "shared/errors.go",
+      "shared/safe_queue.go",
+      "shared/safemap.go",
+      "shared/types.go"
+    ],
+    "wm/wm_watchmachine_interface.go": []
+  }
+}
