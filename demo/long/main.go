@@ -10,8 +10,16 @@ import (
 
 var a = "a"
 
+func nonClosure() {
+	defer print(a)
+	print(a)
+	return
+}
 func main() {
 	print(a)
+	//go 감지 제크용
+	go nonClosure()
+
 	config := watch.DefaultWatcherConfig()
 	config.DefaultTimeout = 2 * time.Minute
 	watcher := watch.NewWatcher(config)
@@ -19,6 +27,9 @@ func main() {
 		"DEMO_NAME": "Long-Running Trading Simulator", "DEMO_VERSION": "1.0.0",
 	}).Cleanup(cleanupReducer)
 
+	{
+		print(a)
+	}
 	fmt.Println("\n▶️  Press Ctrl+C to stop | Auto-stop after 10 minutes")
 	result, err := watcher.StartAndWait(
 		watch.WithTimeout(10*time.Minute),

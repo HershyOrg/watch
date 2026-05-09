@@ -24,7 +24,6 @@ func BTCPriceFlow(flowCtx wm.FlowContext) (chan wm.UpdateFunc[float64], error) {
 	if err := stream.Connect(); err != nil {
 		return nil, fmt.Errorf("binance connect: %w", err)
 	}
-
 	sourceCh, err := stream.GetBTCPriceStream()(flowCtx)
 	if err != nil {
 		stream.Close()
