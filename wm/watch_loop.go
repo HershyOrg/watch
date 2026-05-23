@@ -3,6 +3,7 @@ package wm
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/HershyOrg/watch/shared"
@@ -23,7 +24,7 @@ type WatchLoop struct {
 	eventChan             chan<- LoopEvent // WatchMachine의 eventChan 참조
 
 	// 런타임 상태
-	rootCtx    context.Context
+	rootMu     sync.Mutex
 	rootCancel context.CancelFunc
 }
 
@@ -72,25 +73,20 @@ func (wl *WatchLoop) Execute(effect LoopEffect) LoopEffectDrivenEvent {
 }
 
 func (wl *WatchLoop) executeStart() LoopEffectDrivenEvent {
-	if wl.rootCancel != nil {
-		wl.rootCancel()
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
-	wl.rootCtx = ctx
-	wl.rootCancel = cancel
+	wl.replaceRootCancel(cancel)
 
 	switch wl.watchType {
 	case WatchCallType:
-		return wl.startCallLoop()
+		return wl.startCallLoop(ctx)
 	case WatchFlowType:
-		return wl.startFlowLoop()
+		return wl.startFlowLoop(ctx)
 	default:
 		return &LoopStartFailed{Err: fmt.Errorf("unsupported watch type: %s", wl.watchType)}
 	}
 }
 
-func (wl *WatchLoop) startCallLoop() LoopEffectDrivenEvent {
+func (wl *WatchLoop) startCallLoop(ctx context.Context) LoopEffectDrivenEvent {
 	if wl.getRawCallHandleOrNil == nil {
 		err := fmt.Errorf("GetRawCallHandleFunc is nil")
 		wl.recordGetHandleErr(err)
@@ -101,7 +97,7 @@ func (wl *WatchLoop) startCallLoop() LoopEffectDrivenEvent {
 	}
 
 	// GetHandle 호출 (패닉 핸들링)
-	handle, err := wl.safeGetCallHandle()
+	handle, err := wl.safeGetCallHandle(ctx)
 	if err != nil {
 		wl.recordGetHandleErr(err)
 		return &LoopGotErrFromGetHandle{
@@ -113,7 +109,7 @@ func (wl *WatchLoop) startCallLoop() LoopEffectDrivenEvent {
 
 	// 초기값은 기록하지 않음. Init은 "읽는 측"의 책임.
 	// ticker 고루틴 시작
-	go wl.runCallTicker(handle)
+	go wl.runCallTicker(ctx, handle)
 
 	return &LoopStarted{}
 }
@@ -132,19 +128,19 @@ func (wl *WatchLoop) recordGetHandleErr(err error) {
 	wl.notifySubscribers()
 }
 
-func (wl *WatchLoop) runCallTicker(handle RawCallHandle) {
+func (wl *WatchLoop) runCallTicker(ctx context.Context, handle RawCallHandle) {
 	ticker := time.NewTicker(handle.Tick)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-wl.rootCtx.Done():
+		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			drainDur := wl.processCallTick(handle)
+			drainDur := wl.processCallTick(ctx, handle)
 			if drainDur > 0 {
 				// drain 동안 밀린 tick을 버림
-				wl.drainTickerChanDuring(ticker.C, drainDur)
+				wl.drainTickerChanDuring(ctx, ticker.C, drainDur)
 			}
 		}
 	}
@@ -155,13 +151,13 @@ func (wl *WatchLoop) runCallTicker(handle RawCallHandle) {
 // UpdateFunc 패닉 → 에러를 담은 RawWatchValue로 처리.
 // 모든 경로가 동일한 snapshot 기록 흐름을 따름.
 // processCallTick는 한 번의 tick을 처리하고, drain이 필요하면 그 duration을 반환함.
-func (wl *WatchLoop) processCallTick(handle RawCallHandle) time.Duration {
+func (wl *WatchLoop) processCallTick(ctx context.Context, handle RawCallHandle) time.Duration {
 	// RunContext 생성 (timeout)
 	timeout := wl.loopCtxConfig.RunContextTimeout
 	if timeout <= 0 {
 		timeout = 1 * time.Minute
 	}
-	runCtx, cancel := context.WithTimeout(wl.rootCtx, timeout)
+	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	rc := &simpleRunContext{Context: runCtx}
@@ -198,7 +194,7 @@ func (wl *WatchLoop) processCallTick(handle RawCallHandle) time.Duration {
 
 // --- Flow ---
 
-func (wl *WatchLoop) startFlowLoop() LoopEffectDrivenEvent {
+func (wl *WatchLoop) startFlowLoop(ctx context.Context) LoopEffectDrivenEvent {
 	if wl.getRawFlowHandleOrNil == nil {
 		err := fmt.Errorf("GetRawFlowHandleFunc is nil")
 		wl.recordGetHandleErr(err)
@@ -208,7 +204,7 @@ func (wl *WatchLoop) startFlowLoop() LoopEffectDrivenEvent {
 		}
 	}
 
-	handle, err := wl.safeGetFlowHandle()
+	handle, err := wl.safeGetFlowHandle(ctx)
 	if err != nil {
 		wl.recordGetHandleErr(err)
 		return &LoopGotErrFromGetHandle{
@@ -218,15 +214,15 @@ func (wl *WatchLoop) startFlowLoop() LoopEffectDrivenEvent {
 		}
 	}
 
-	go wl.runFlowListener(handle)
+	go wl.runFlowListener(ctx, handle)
 
 	return &LoopStarted{}
 }
 
-func (wl *WatchLoop) runFlowListener(handle RawFlowHandle) {
+func (wl *WatchLoop) runFlowListener(ctx context.Context, handle RawFlowHandle) {
 	for {
 		select {
-		case <-wl.rootCtx.Done():
+		case <-ctx.Done():
 			return
 		case updateFunc, ok := <-handle.RawFlowChan:
 			if !ok {
@@ -234,7 +230,7 @@ func (wl *WatchLoop) runFlowListener(handle RawFlowHandle) {
 			}
 			drainDur := wl.processFlowUpdate(updateFunc)
 			if drainDur > 0 {
-				wl.drainFlowChanDuring(handle.RawFlowChan, drainDur)
+				wl.drainFlowChanDuring(ctx, handle.RawFlowChan, drainDur)
 			}
 		}
 	}
@@ -264,14 +260,14 @@ func (wl *WatchLoop) processFlowUpdate(updateFunc RawUpdateFunc) time.Duration {
 	return 0
 }
 
-func (wl *WatchLoop) safeGetFlowHandle() (handle RawFlowHandle, err error) {
+func (wl *WatchLoop) safeGetFlowHandle(ctx context.Context) (handle RawFlowHandle, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("panic in GetFlowHandle: %v", r)
 		}
 	}()
 
-	fc := &simpleRunContext{Context: wl.rootCtx}
+	fc := &simpleRunContext{Context: ctx}
 	handle, err = wl.getRawFlowHandleOrNil(fc)
 	return
 }
@@ -281,9 +277,7 @@ func (wl *WatchLoop) safeGetFlowHandle() (handle RawFlowHandle, err error) {
 func (wl *WatchLoop) executeTryRecover() LoopEffectDrivenEvent {
 	// sleep 전에 반드시 Loop 중지 — 어떤 경로에서든
 	// History 누적 방지
-	if wl.rootCancel != nil {
-		wl.rootCancel()
-	}
+	wl.cancelRoot()
 
 	consecutiveErrs := wl.loopHistory.ConsecutiveErrors()
 	if consecutiveErrs >= wl.recoveryPolicy.MaxConsecutiveFailures {
@@ -314,7 +308,7 @@ func (wl *WatchLoop) handleUpdateFuncError() time.Duration {
 
 // drainTickerChanDuring은 dur 동안 ticker 채널에서 들어오는 tick을 버림.
 // runCallTicker에서 직접 호출됨 (같은 고루틴이므로 경쟁 없음).
-func (wl *WatchLoop) drainTickerChanDuring(tickerC <-chan time.Time, dur time.Duration) {
+func (wl *WatchLoop) drainTickerChanDuring(ctx context.Context, tickerC <-chan time.Time, dur time.Duration) {
 	timer := time.NewTimer(dur)
 	defer timer.Stop()
 	for {
@@ -323,13 +317,13 @@ func (wl *WatchLoop) drainTickerChanDuring(tickerC <-chan time.Time, dur time.Du
 			return
 		case <-tickerC:
 			// tick 버림
-		case <-wl.rootCtx.Done():
+		case <-ctx.Done():
 			return
 		}
 	}
 }
 
-func (wl *WatchLoop) drainFlowChanDuring(ch <-chan RawUpdateFunc, dur time.Duration) {
+func (wl *WatchLoop) drainFlowChanDuring(ctx context.Context, ch <-chan RawUpdateFunc, dur time.Duration) {
 	timer := time.NewTimer(dur)
 	defer timer.Stop()
 	for {
@@ -340,7 +334,7 @@ func (wl *WatchLoop) drainFlowChanDuring(ch <-chan RawUpdateFunc, dur time.Durat
 			if !ok {
 				return
 			}
-		case <-wl.rootCtx.Done():
+		case <-ctx.Done():
 			return
 		}
 	}
@@ -349,36 +343,30 @@ func (wl *WatchLoop) drainFlowChanDuring(ch <-chan RawUpdateFunc, dur time.Durat
 // --- Stop/Kill/Crash ---
 
 func (wl *WatchLoop) executeStop() LoopEffectDrivenEvent {
-	if wl.rootCancel != nil {
-		wl.rootCancel()
-	}
+	wl.cancelRoot()
 	return &LoopStopCompleted{}
 }
 
 func (wl *WatchLoop) executeKill() LoopEffectDrivenEvent {
-	if wl.rootCancel != nil {
-		wl.rootCancel()
-	}
+	wl.cancelRoot()
 	return &LoopKillCompleted{}
 }
 
 func (wl *WatchLoop) executeCrash() LoopEffectDrivenEvent {
-	if wl.rootCancel != nil {
-		wl.rootCancel()
-	}
+	wl.cancelRoot()
 	return &LoopCrashCompleted{}
 }
 
 // --- 패닉 핸들링 헬퍼 ---
 
-func (wl *WatchLoop) safeGetCallHandle() (handle RawCallHandle, err error) {
+func (wl *WatchLoop) safeGetCallHandle(ctx context.Context) (handle RawCallHandle, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("panic in GetCallHandle: %v", r)
 		}
 	}()
 
-	rc := &simpleRunContext{Context: wl.rootCtx}
+	rc := &simpleRunContext{Context: ctx}
 	handle, err = wl.getRawCallHandleOrNil(rc)
 	return
 }
@@ -453,3 +441,25 @@ type simpleRunContext struct {
 
 func (s *simpleRunContext) RunContext()  {}
 func (s *simpleRunContext) RootContext() {}
+
+func (wl *WatchLoop) replaceRootCancel(cancel context.CancelFunc) {
+	wl.rootMu.Lock()
+	oldCancel := wl.rootCancel
+	wl.rootCancel = cancel
+	wl.rootMu.Unlock()
+
+	if oldCancel != nil {
+		oldCancel()
+	}
+}
+
+func (wl *WatchLoop) cancelRoot() {
+	wl.rootMu.Lock()
+	cancel := wl.rootCancel
+	wl.rootCancel = nil
+	wl.rootMu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+}

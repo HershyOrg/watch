@@ -93,6 +93,8 @@ func (t *MgrfuncRnner) SetCleaner(cleaner Cleaner) {
 
 // GetRootContext returns the rootCtx for Watch functions to use.
 func (t *MgrfuncRnner) GetRootContext() context.Context {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	return t.rootCtx
 }
 
@@ -200,7 +202,7 @@ func (t *MgrfuncRnner) executeRun(effect *RunEffect) (*EffectResult, EffectDrive
 	t.mu.Unlock()
 
 	// Create execution context with timeout from rootCtx
-	execCtx, cancel := context.WithTimeout(t.rootCtx, t.config.DefaultTimeout)
+	execCtx, cancel := context.WithTimeout(t.GetRootContext(), t.config.DefaultTimeout)
 	defer cancel()
 
 	// Get message from effect
@@ -329,7 +331,7 @@ func (t *MgrfuncRnner) executeCleanup(effect *CleanupEffect) (*EffectResult, Eff
 	}
 
 	// Cancel rootCtx before cleanup - stops all Watch goroutines
-	t.rootCtxCancel()
+	t.cancelRootContext()
 
 	// MgrFuncRunnerState → CleaningUp
 	t.mu.Lock()
@@ -338,16 +340,26 @@ func (t *MgrfuncRnner) executeCleanup(effect *CleanupEffect) (*EffectResult, Eff
 
 	// Execute cleanup using persistent ManageContext
 	if t.cleaner != nil {
-		cleanCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		cleanCtx, cancel := context.WithTimeout(context.Background(), t.cleanupTimeout())
 		defer cancel()
 		t.manageCtx.UpdateContext(cleanCtx)
 
-		err := t.cleaner.ClearRun(t.manageCtx)
-		if err != nil {
+		done := make(chan error, 1)
+		go func() {
+			done <- t.cleaner.ClearRun(t.manageCtx)
+		}()
+
+		select {
+		case err := <-done:
+			if err != nil {
+				result.Success = false
+				result.Error = err
+			} else {
+				result.Success = true
+			}
+		case <-cleanCtx.Done():
 			result.Success = false
-			result.Error = err
-		} else {
-			result.Success = true
+			result.Error = cleanCtx.Err()
 		}
 	} else {
 		result.Success = true
@@ -437,6 +449,22 @@ func (t *MgrfuncRnner) executeDirectCrash() (*EffectResult, EffectDrivenEvent) {
 		Timestamp: time.Now(),
 	}
 	return result, &DirectCrashed{}
+}
+
+func (t *MgrfuncRnner) cancelRootContext() {
+	t.mu.RLock()
+	cancel := t.rootCtxCancel
+	t.mu.RUnlock()
+	if cancel != nil {
+		cancel()
+	}
+}
+
+func (t *MgrfuncRnner) cleanupTimeout() time.Duration {
+	if t.config.CleanupTimeout > 0 {
+		return t.config.CleanupTimeout
+	}
+	return 5 * time.Minute
 }
 
 // countConsecutiveFailures counts recent consecutive failures from logs.

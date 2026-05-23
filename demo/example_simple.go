@@ -15,7 +15,10 @@ func main2() {
 	config := watch.DefaultWatcherConfig()
 	config.DefaultTimeout = 5 * time.Second
 
-	watcher := watch.NewWatcher(config)
+	watcher, err := watch.NewWatcher(config)
+	if err != nil {
+		panic(err)
+	}
 
 	// Managed function with reactive state
 	counter := 0

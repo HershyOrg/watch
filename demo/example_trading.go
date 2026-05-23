@@ -234,7 +234,10 @@ func main() {
 	// Create watcher
 	watcherConfig := watch.DefaultWatcherConfig()
 	watcherConfig.DefaultTimeout = 10 * time.Second
-	watcher := watch.NewWatcher(watcherConfig)
+	watcher, err := watch.NewWatcher(watcherConfig)
+	if err != nil {
+		panic(err)
+	}
 
 	// Create environment variables for managed function
 	envVars := map[string]any{

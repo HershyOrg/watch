@@ -4,6 +4,7 @@ package manager
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/HershyOrg/watch/shared"
 )
@@ -25,7 +26,11 @@ type contextEntry struct {
 // This is a concrete implementation that manages execution context,
 // messages, manager reference, and user-defined values.
 type ManageContext struct {
-	context.Context
+	ctxMu sync.RWMutex
+	ctx   context.Context
+
+	metaMu sync.RWMutex
+
 	message         *shared.Message
 	triggeredSignal *shared.TriggeredSignal
 	manager         *Manager // Manager reference (type-safe!)
@@ -36,8 +41,11 @@ type ManageContext struct {
 
 // NewManageContext creates a new ManageContext with the given parameters.
 func NewManageContext(ctx context.Context, logger ContextLogger) *ManageContext {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	return &ManageContext{
-		Context:    ctx,
+		ctx:        ctx,
 		message:    nil,
 		manager:    nil,
 		valueStore: make(map[string]contextEntry),
@@ -47,21 +55,27 @@ func NewManageContext(ctx context.Context, logger ContextLogger) *ManageContext 
 
 // GetManager returns the Manager reference (type-safe!).
 func (mc *ManageContext) GetManager() *Manager {
+	mc.metaMu.RLock()
+	defer mc.metaMu.RUnlock()
 	return mc.manager
 }
 
 // SetManager sets the manager reference.
 func (mc *ManageContext) SetManager(manager *Manager) {
+	mc.metaMu.Lock()
+	defer mc.metaMu.Unlock()
 	mc.manager = manager
 }
 
 func (mc *ManageContext) Message() *shared.Message {
+	mc.metaMu.RLock()
+	defer mc.metaMu.RUnlock()
 	return mc.message
 }
 
 func (mc *ManageContext) GetTriggeredSignal() *shared.TriggeredSignal {
-	mc.valuesMutex.RLock()
-	defer mc.valuesMutex.RUnlock()
+	mc.metaMu.RLock()
+	defer mc.metaMu.RUnlock()
 	return mc.triggeredSignal
 }
 
@@ -124,21 +138,28 @@ func (mc *ManageContext) UpdateValue(key string, updateFn func(current any) any)
 // SetMessage updates the current message.
 // This is called internally by the framework during execution.
 func (mc *ManageContext) SetMessage(msg *shared.Message) {
+	mc.metaMu.Lock()
+	defer mc.metaMu.Unlock()
 	mc.message = msg
 }
 
 // SetTriggeredSignal updates the triggered signal information.
 // This is called internally by the framework during execution.
 func (mc *ManageContext) SetTriggeredSignal(ts *shared.TriggeredSignal) {
-	mc.valuesMutex.Lock()
-	defer mc.valuesMutex.Unlock()
+	mc.metaMu.Lock()
+	defer mc.metaMu.Unlock()
 	mc.triggeredSignal = ts
 }
 
 // UpdateContext replaces the underlying context.
 // This is used by EffectHandler when creating execution contexts with timeouts.
 func (mc *ManageContext) UpdateContext(ctx context.Context) {
-	mc.Context = ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	mc.ctxMu.Lock()
+	defer mc.ctxMu.Unlock()
+	mc.ctx = ctx
 }
 
 // SetFrozenValues injects immutable values into the store.
@@ -164,13 +185,43 @@ func (mc *ManageContext) GetLogger() ContextLogger {
 // GetWatcher returns the manager as any to implement shared.ManageContext interface.
 // This maintains compatibility with the interface while internally using Manager.
 func (mc *ManageContext) GetWatcher() any {
+	mc.metaMu.RLock()
+	defer mc.metaMu.RUnlock()
 	return mc.manager
 }
 
 // GetMachineRegistry returns the MachineRegistry as any to implement shared.ManageContext interface.
 func (mc *ManageContext) GetMachineRegistry() any {
-	if mc.manager == nil {
+	mc.metaMu.RLock()
+	manager := mc.manager
+	mc.metaMu.RUnlock()
+	if manager == nil {
 		return nil
 	}
-	return mc.manager.GetMachineRegistry()
+	return manager.GetMachineRegistry()
+}
+
+func (mc *ManageContext) Deadline() (deadline time.Time, ok bool) {
+	return mc.currentContext().Deadline()
+}
+
+func (mc *ManageContext) Done() <-chan struct{} {
+	return mc.currentContext().Done()
+}
+
+func (mc *ManageContext) Err() error {
+	return mc.currentContext().Err()
+}
+
+func (mc *ManageContext) Value(key any) any {
+	return mc.currentContext().Value(key)
+}
+
+func (mc *ManageContext) currentContext() context.Context {
+	mc.ctxMu.RLock()
+	defer mc.ctxMu.RUnlock()
+	if mc.ctx == nil {
+		return context.Background()
+	}
+	return mc.ctx
 }

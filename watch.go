@@ -80,16 +80,23 @@ func watchCallWithContract[T any](
 		validateWatchContract(varName, existing.Contract, contract)
 	} else {
 		getRawCallHandle := parseGetRawCallHandle(setupGetUpdateFunc, varName, tick)
+		cfg := mgr.GetConfig()
 		machine := wm.NewWatchMachine(wm.WatchMachineConfig{
 			VarName:               varName,
 			WatchType:             contract.WatchType,
 			Contract:              contract,
 			GetRawCallHandleOrNil: getRawCallHandle,
 			LoopCtxConfig:         wm.LoopContextConfig{RunContextTimeout: 1 * time.Minute},
+			HistoryMaxLen:         cfg.WatchMachineHistoryMaxLen,
+			HistoryMaxDur:         cfg.WatchMachineHistoryMaxDur,
 		})
-		registry.RegisterWatchMachine(mgr.GetName(), machine)
+		if err := registry.RegisterWatchMachine(mgr.GetName(), machine); err != nil {
+			panicWatchInit(varName, fmt.Sprintf("failed to register watch machine: %v", err))
+		}
 		machine.RegisterSubscriber(mgr)
-		machine.Start()
+		if err := machine.Start(); err != nil {
+			panicWatchInit(varName, fmt.Sprintf("failed to start watch machine: %v", err))
+		}
 	}
 
 	// VarState에서 읽기
@@ -127,16 +134,23 @@ func WatchFlow[T any](
 		validateWatchContract(varName, existing.Contract, contract)
 	} else {
 		getRawFlowHandle := parseGetRawFlowHandle(setupUpdateFuncChan, varName)
+		cfg := mgr.GetConfig()
 		machine := wm.NewWatchMachine(wm.WatchMachineConfig{
 			VarName:               varName,
 			WatchType:             wm.WatchFlowType,
 			Contract:              contract,
 			GetRawFlowHandleOrNil: getRawFlowHandle,
 			LoopCtxConfig:         wm.LoopContextConfig{RunContextTimeout: 1 * time.Minute},
+			HistoryMaxLen:         cfg.WatchMachineHistoryMaxLen,
+			HistoryMaxDur:         cfg.WatchMachineHistoryMaxDur,
 		})
-		registry.RegisterWatchMachine(mgr.GetName(), machine)
+		if err := registry.RegisterWatchMachine(mgr.GetName(), machine); err != nil {
+			panicWatchInit(varName, fmt.Sprintf("failed to register watch machine: %v", err))
+		}
 		machine.RegisterSubscriber(mgr)
-		machine.Start()
+		if err := machine.Start(); err != nil {
+			panicWatchInit(varName, fmt.Sprintf("failed to start watch machine: %v", err))
+		}
 	}
 
 	return readVarStateOrInit(mgr, varName, init)

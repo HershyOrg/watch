@@ -16,7 +16,10 @@ func main1() {
 	fmt.Println()
 
 	config := watch.DefaultWatcherConfig()
-	watcher := watch.NewWatcher(config)
+	watcher, err := watch.NewWatcher(config)
+	if err != nil {
+		panic(err)
+	}
 
 	// Simulated external data source
 	externalCounter := 0

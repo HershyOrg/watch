@@ -26,7 +26,10 @@ func main() {
 
 	config := watch.DefaultWatcherConfig()
 	config.DefaultTimeout = 2 * time.Minute
-	watcher := watch.NewWatcher(config)
+	watcher, err := watch.NewWatcher(config)
+	if err != nil {
+		panic(err)
+	}
 	watcher.Manage(delcaredLogic, "TradingSimulator", map[string]any{
 		"DEMO_NAME": "Long-Running Trading Simulator", "DEMO_VERSION": "1.0.0",
 	}).Cleanup(cleanupReducer)

@@ -61,7 +61,7 @@ func (r *Reducer) Run(ctx context.Context, runner *MgrfuncRnner) (err error) {
 	}()
 
 	var tickCh <-chan time.Time
-	if r.manager != nil && r.manager.config != nil && r.manager.config.HealthCheckInterval > 0 {
+	if r.manager != nil && r.manager.config != nil {
 		ticker := time.NewTicker(r.manager.config.HealthCheckInterval)
 		defer ticker.Stop()
 		tickCh = ticker.C

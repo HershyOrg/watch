@@ -2,10 +2,23 @@ package wm
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/HershyOrg/watch/shared"
+)
+
+var (
+	ErrWatchMachineClosed         = errors.New("watch machine closed")
+	ErrWatchMachineEventQueueFull = errors.New("watch machine event queue full")
+)
+
+const (
+	DefaultLoopHistoryMaxLen = 30000
+	DefaultLoopHistoryMaxDur = 24 * time.Hour
 )
 
 // WatchMachine은 Watch와 관련한 기능을 한데 모은 구조체임.
@@ -28,6 +41,7 @@ type WatchMachine struct {
 
 	//currentLoopState는 Loop의 현재 상태임.
 	//Reducer가 순수 함수이므로, WatchMachine이 state를 보관함.
+	stateMu          sync.RWMutex
 	currentLoopState LoopState
 
 	//loopHistory는 watchMachine의 관측기록을 나타낸다.
@@ -38,6 +52,8 @@ type WatchMachine struct {
 
 	//eventChan은 외부 제어 이벤트(Start/Stop/Kill)를 이벤트 루프에 전달함.
 	eventChan chan LoopEvent
+	eventMu   sync.RWMutex
+	closed    bool
 
 	//notifyChs는 Subscriber에게 NewSigAppend 알림을 보내기 위한 쓰기 가능 채널들.
 	notifyChs []chan struct{}
@@ -48,15 +64,16 @@ type WatchMachine struct {
 	//Subscribers는 WatchMachine을 구독한 Manager들임.
 	Subscribers []Subscriber
 
-	//PublisherOrNil는 Multi-Manager가 구현되었을 시,
-	//해당 WatchMachine을 Export한 Manager를 나타냄
+	//PublisherOrNil는 Multi-Manager가 구현되었을 때 사용할 발행자 목록임.
+	//현재 단일 Manager 버전에서는 보관만 하고 런타임 판정에는 참여하지 않음.
 	PublishersOrNil []Publisher
 
 	//MachineRegistry에 WatchMachine을 등록함으로써,
 	//Wathcer가 모든 등록된 WatchMachine을 한 곳에서 조회 가능하게 한다.
 	MachineRegistry MachineRegistry
 
-	//PublishersChecker를 통해 자신을 Export한 Manager가 죽었는지 체크함.
+	//PublishersChecker는 Multi-Manager에서 발행자 상태를 검사하기 위한 확장점임.
+	//현재 버전에서는 기능 범위 밖이므로 event loop에서 호출하지 않음.
 	PublishersChecker PublishersCheckerInterface
 
 	//marker는 구독자별 최종 읽은 인덱스를 기록한다.
@@ -91,6 +108,8 @@ type WatchMachineConfig struct {
 	GetRawFlowHandleOrNil GetRawFlowHandleFunc
 	LoopCtxConfig         LoopContextConfig
 	RecoveryPolicy        LoopRecoveryPolicy
+	HistoryMaxLen         int
+	HistoryMaxDur         time.Duration
 }
 
 // NewWatchMachine은 WatchMachine을 생성하고 이벤트 루프를 시작함.
@@ -99,12 +118,18 @@ func NewWatchMachine(cfg WatchMachineConfig) *WatchMachine {
 	if cfg.RecoveryPolicy.MaxConsecutiveFailures == 0 {
 		cfg.RecoveryPolicy = DefaultLoopRecoveryPolicy()
 	}
-	//* 여기 하드코딩된 부분은
-	//* 추후 WatchXXX에 윈도우 추가 시 설정값 기반으로 바뀔 예정임.
+	historyMaxLen := cfg.HistoryMaxLen
+	if historyMaxLen <= 0 {
+		historyMaxLen = DefaultLoopHistoryMaxLen
+	}
+	historyMaxDur := cfg.HistoryMaxDur
+	if historyMaxDur <= 0 {
+		historyMaxDur = DefaultLoopHistoryMaxDur
+	}
 	history := NewLoopHistory(LoopHistoryConfig{
 		varName: cfg.VarName,
-		MaxLen:  30000,
-		MaxDur:  24 * time.Hour,
+		MaxLen:  historyMaxLen,
+		MaxDur:  historyMaxDur,
 	})
 	notifyChs := make([]chan struct{}, 0)
 	eventChan := make(chan LoopEvent, 100)
@@ -162,8 +187,8 @@ func (wm *WatchMachine) runEventLoop(ctx context.Context) {
 // reduceAndExecute는 LoopEvent를 Reduce 후 Effect를 실행하고,
 // DrivenEvent를 재귀적으로 처리함.
 func (wm *WatchMachine) reduceAndExecute(event LoopEvent) {
-	nextState, effects := wm.loopReducer.Reduce(wm.currentLoopState, event)
-	wm.currentLoopState = nextState
+	nextState, effects := wm.loopReducer.Reduce(wm.getLoopState(), event)
+	wm.setLoopState(nextState)
 
 	for _, effect := range effects {
 		driven := wm.loop.Execute(effect)
@@ -176,8 +201,8 @@ func (wm *WatchMachine) reduceAndExecute(event LoopEvent) {
 // reduceAndExecuteDriven은 DrivenEvent를 ReduceDriven 후 Effect를 실행하고,
 // 재귀적으로 처리함.
 func (wm *WatchMachine) reduceAndExecuteDriven(driven LoopEffectDrivenEvent) {
-	nextState, effects := wm.loopReducer.ReduceDriven(wm.currentLoopState, driven)
-	wm.currentLoopState = nextState
+	nextState, effects := wm.loopReducer.ReduceDriven(wm.getLoopState(), driven)
+	wm.setLoopState(nextState)
 
 	for _, effect := range effects {
 		drivenResult := wm.loop.Execute(effect)
@@ -188,23 +213,23 @@ func (wm *WatchMachine) reduceAndExecuteDriven(driven LoopEffectDrivenEvent) {
 }
 
 // Start는 WatchMachine의 Loop를 시작함.
-func (wm *WatchMachine) Start() {
-	wm.eventChan <- &StartRequested{NeedInit: true}
+func (wm *WatchMachine) Start() error {
+	return wm.sendEvent(&StartRequested{NeedInit: true})
 }
 
 // Stop은 WatchMachine의 Loop를 정상 종료함.
-func (wm *WatchMachine) Stop() {
-	wm.eventChan <- &StopRequested{}
+func (wm *WatchMachine) Stop() error {
+	return wm.sendEvent(&StopRequested{})
 }
 
 // Kill은 WatchMachine의 Loop를 강제 종료함.
-func (wm *WatchMachine) Kill() {
-	wm.eventChan <- &KillRequested{}
+func (wm *WatchMachine) Kill() error {
+	return wm.sendEvent(&KillRequested{})
 }
 
 // GetLoopState는 현재 Loop 상태를 반환함.
 func (wm *WatchMachine) GetLoopState() LoopState {
-	return wm.currentLoopState
+	return wm.getLoopState()
 }
 
 // GetLoopHistory는 현재 유효한 관측 기록을 시간순 복사본으로 반환함.
@@ -214,8 +239,17 @@ func (wm *WatchMachine) GetLoopHistory() []ReducedSnapshot {
 
 // Close는 이벤트 루프를 종료함.
 func (wm *WatchMachine) Close() {
-	if wm.cancelEventLoop != nil {
-		wm.cancelEventLoop()
+	wm.eventMu.Lock()
+	if wm.closed {
+		wm.eventMu.Unlock()
+		return
+	}
+	wm.closed = true
+	cancel := wm.cancelEventLoop
+	wm.eventMu.Unlock()
+
+	if cancel != nil {
+		cancel()
 	}
 }
 
@@ -246,4 +280,33 @@ func (wm *WatchMachine) RegisterSubscriber(sub Subscriber) {
 	wm.marker.Register(sub.GetName())
 	*wm.loop.notifyChs = append(*wm.loop.notifyChs, sub.GetNewSigAppendedChan())
 	wm.Subscribers = append(wm.Subscribers, sub)
+}
+
+func (wm *WatchMachine) getLoopState() LoopState {
+	wm.stateMu.RLock()
+	defer wm.stateMu.RUnlock()
+	return wm.currentLoopState
+}
+
+func (wm *WatchMachine) setLoopState(state LoopState) {
+	wm.stateMu.Lock()
+	defer wm.stateMu.Unlock()
+	wm.currentLoopState = state
+}
+
+func (wm *WatchMachine) sendEvent(event LoopEvent) error {
+	wm.eventMu.RLock()
+	if wm.closed {
+		wm.eventMu.RUnlock()
+		return fmt.Errorf("%w: %s", ErrWatchMachineClosed, wm.VarName)
+	}
+	eventChan := wm.eventChan
+	wm.eventMu.RUnlock()
+
+	select {
+	case eventChan <- event:
+		return nil
+	default:
+		return fmt.Errorf("%w: %s", ErrWatchMachineEventQueueFull, wm.VarName)
+	}
 }

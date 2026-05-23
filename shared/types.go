@@ -395,6 +395,10 @@ type WatcherConfig struct {
 	// ServerPort is the port number for the Watcher server
 	ServerPort int
 
+	// DisableAPIServer disables the HTTP API server.
+	// ServerPort must still be a valid positive port so the config remains complete.
+	DisableAPIServer bool
+
 	// DefaultTimeout is the default timeout for managed function execution
 	DefaultTimeout time.Duration
 
@@ -403,11 +407,21 @@ type WatcherConfig struct {
 
 	// HealthCheckInterval is the interval for checking WatchMachine health.
 	// If any WM is in a terminal/stopped state, Manager transitions to terminal.
-	// 0 disables health check. Default: 3 seconds.
+	// Health check is required; this value must be positive.
 	HealthCheckInterval time.Duration
 
 	// ShutdownTimeout is the maximum time Run allows Stop to finish after ctx cancellation.
 	ShutdownTimeout time.Duration
+
+	// CleanupTimeout bounds Cleaner.ClearRun. Cleanup functions must still observe ctx.Done()
+	// because Go cannot forcibly stop a goroutine that ignores cancellation.
+	CleanupTimeout time.Duration
+
+	// WatchMachineHistoryMaxLen bounds each WatchMachine's reduced snapshot history.
+	WatchMachineHistoryMaxLen int
+
+	// WatchMachineHistoryMaxDur bounds each WatchMachine's reduced snapshot history by age.
+	WatchMachineHistoryMaxDur time.Duration
 
 	// Resource limit settings for long-running stability
 	MaxLogEntries      int // Maximum log entries before circular buffer truncation (default: 50,000)
@@ -437,7 +451,7 @@ type RecoveryPolicy struct {
 	//   - 2nd failure: wait 30s → Ready
 	//   - 3rd failure: wait 60s → Ready
 	//   - 4th+ failure: WaitRecover (if >= MinConsecutiveFailures)
-	// If nil or empty, no delay (legacy behavior for backward compatibility).
+	// Must be non-nil, non-empty, and contain only positive durations.
 	LightweightRetryDelays []time.Duration
 }
 
@@ -488,13 +502,12 @@ func RawToTyped[T any](rv RawWatchValueWithName) WatchValue[T] {
 
 	v, ok := rv.RawWatchValue.Value.(T)
 	if !ok {
-
-		panic(fmt.Sprintf(
-			"RawToTyped: type mismatch for var '%s': expected %T, got %T",
-			rv.VarName,
+		cause := fmt.Errorf(
+			"expected %T, got %T",
 			*new(T),
 			rv.RawWatchValue.Value,
-		))
+		)
+		panic(NewWatchInitPanic(rv.VarName, "watch value type mismatch", cause))
 	}
 
 	return WatchValue[T]{
@@ -628,13 +641,16 @@ func (tv TickValue) IsInitial() bool {
 // DefaultWatcherConfig returns default configuration.
 func DefaultWatcherConfig() WatcherConfig {
 	return WatcherConfig{
-		ServerPort:          8080,
-		DefaultTimeout:      1 * time.Minute,
-		RecoveryPolicy:      DefaultRecoveryPolicy(),
-		HealthCheckInterval: 3 * time.Second,
-		ShutdownTimeout:     5 * time.Minute,
-		MaxLogEntries:       50_000,
-		MaxMemoEntries:      1_000,
-		SignalChanCapacity:  50_000,
+		ServerPort:                8080,
+		DefaultTimeout:            1 * time.Minute,
+		RecoveryPolicy:            DefaultRecoveryPolicy(),
+		HealthCheckInterval:       3 * time.Second,
+		ShutdownTimeout:           5 * time.Minute,
+		CleanupTimeout:            5 * time.Minute,
+		WatchMachineHistoryMaxLen: 30000,
+		WatchMachineHistoryMaxDur: 24 * time.Hour,
+		MaxLogEntries:             50_000,
+		MaxMemoEntries:            1_000,
+		SignalChanCapacity:        50_000,
 	}
 }

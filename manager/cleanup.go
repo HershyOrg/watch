@@ -20,6 +20,8 @@ func NewCleanupBuilder(mgr *Manager) *CleanupBuilder {
 }
 
 // Cleanup registers a cleanup function to be called on Stop/Kill/Crash.
+// The cleanup function must observe ctx.Done(); the runner bounds waiting by
+// WatcherConfig.CleanupTimeout, but Go cannot forcibly terminate ignored work.
 // It wraps the user's cleanup function in a cleanupAdapter and sets it in the EffectHandler.
 // Returns the CleanupBuilder to maintain compatibility with existing code patterns.
 func (cb *CleanupBuilder) Cleanup(cleanupFn func(ctx shared.ManageContext)) *CleanupBuilder {

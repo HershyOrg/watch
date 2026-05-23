@@ -16,6 +16,7 @@ import (
 var (
 	ErrNoManagedFunction = errors.New("no managed function registered")
 	ErrWatcherNotRunning = errors.New("watcher not running")
+	ErrInvalidConfig     = errors.New("invalid watcher config")
 )
 
 // Watcher is the core reactive framework engine.
@@ -34,19 +35,16 @@ type Watcher struct {
 
 // NewWatcher creates a new Watcher with the given configuration.
 // The Manager is created later when Manage is called.
-func NewWatcher(config WatcherConfig) *Watcher {
-	if config.DefaultTimeout == 0 {
-		config = DefaultWatcherConfig()
-	}
-	if config.ShutdownTimeout == 0 {
-		config.ShutdownTimeout = DefaultWatcherConfig().ShutdownTimeout
+func NewWatcher(config WatcherConfig) (*Watcher, error) {
+	if err := validateWatcherConfig(config); err != nil {
+		return nil, err
 	}
 
 	return &Watcher{
 		config:          config,
 		manager:         nil,
 		machineRegistry: shared.NewSafeMap[string, *wm.WatchMachine](),
-	}
+	}, nil
 }
 
 // Manage registers a function to be managed by the Watcher.
@@ -112,11 +110,7 @@ func (w *Watcher) Run(ctx context.Context) (ControlState, error) {
 		return state, err
 	}
 
-	timeout := w.config.ShutdownTimeout
-	if timeout <= 0 {
-		timeout = DefaultWatcherConfig().ShutdownTimeout
-	}
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), timeout)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), w.config.ShutdownTimeout)
 	defer cancel()
 
 	if stopErr := w.Stop(shutdownCtx); stopErr != nil {
@@ -124,6 +118,79 @@ func (w *Watcher) Run(ctx context.Context) (ControlState, error) {
 	}
 
 	return w.currentState(), nil
+}
+
+func validateWatcherConfig(config WatcherConfig) error {
+	var errs []error
+
+	if config.ServerPort <= 0 || config.ServerPort > 65535 {
+		errs = append(errs, fmt.Errorf("ServerPort must be in range 1..65535 (got %d)", config.ServerPort))
+	}
+	if config.DefaultTimeout <= 0 {
+		errs = append(errs, fmt.Errorf("DefaultTimeout must be positive (got %s)", config.DefaultTimeout))
+	}
+	if config.HealthCheckInterval <= 0 {
+		errs = append(errs, fmt.Errorf("HealthCheckInterval must be positive (got %s)", config.HealthCheckInterval))
+	}
+	if config.ShutdownTimeout <= 0 {
+		errs = append(errs, fmt.Errorf("ShutdownTimeout must be positive (got %s)", config.ShutdownTimeout))
+	}
+	if config.CleanupTimeout <= 0 {
+		errs = append(errs, fmt.Errorf("CleanupTimeout must be positive (got %s)", config.CleanupTimeout))
+	}
+	if config.WatchMachineHistoryMaxLen <= 0 {
+		errs = append(errs, fmt.Errorf("WatchMachineHistoryMaxLen must be positive (got %d)", config.WatchMachineHistoryMaxLen))
+	}
+	if config.WatchMachineHistoryMaxDur <= 0 {
+		errs = append(errs, fmt.Errorf("WatchMachineHistoryMaxDur must be positive (got %s)", config.WatchMachineHistoryMaxDur))
+	}
+	if config.MaxLogEntries <= 0 {
+		errs = append(errs, fmt.Errorf("MaxLogEntries must be positive (got %d)", config.MaxLogEntries))
+	}
+	if config.MaxMemoEntries <= 0 {
+		errs = append(errs, fmt.Errorf("MaxMemoEntries must be positive (got %d)", config.MaxMemoEntries))
+	}
+	if config.SignalChanCapacity <= 0 {
+		errs = append(errs, fmt.Errorf("SignalChanCapacity must be positive (got %d)", config.SignalChanCapacity))
+	}
+
+	policy := config.RecoveryPolicy
+	if policy.MinConsecutiveFailures < 1 {
+		errs = append(errs, fmt.Errorf("RecoveryPolicy.MinConsecutiveFailures must be >= 1 (got %d)", policy.MinConsecutiveFailures))
+	}
+	if policy.MaxConsecutiveFailures < policy.MinConsecutiveFailures {
+		errs = append(errs, fmt.Errorf(
+			"RecoveryPolicy.MaxConsecutiveFailures must be >= MinConsecutiveFailures (got max=%d min=%d)",
+			policy.MaxConsecutiveFailures,
+			policy.MinConsecutiveFailures,
+		))
+	}
+	if policy.BaseRetryDelay <= 0 {
+		errs = append(errs, fmt.Errorf("RecoveryPolicy.BaseRetryDelay must be positive (got %s)", policy.BaseRetryDelay))
+	}
+	if policy.MaxRetryDelay <= 0 {
+		errs = append(errs, fmt.Errorf("RecoveryPolicy.MaxRetryDelay must be positive (got %s)", policy.MaxRetryDelay))
+	}
+	if policy.MaxRetryDelay < policy.BaseRetryDelay {
+		errs = append(errs, fmt.Errorf(
+			"RecoveryPolicy.MaxRetryDelay must be >= BaseRetryDelay (got max=%s base=%s)",
+			policy.MaxRetryDelay,
+			policy.BaseRetryDelay,
+		))
+	}
+	if len(policy.LightweightRetryDelays) == 0 {
+		errs = append(errs, fmt.Errorf("RecoveryPolicy.LightweightRetryDelays must be non-empty"))
+	}
+	for i, delay := range policy.LightweightRetryDelays {
+		if delay <= 0 {
+			errs = append(errs, fmt.Errorf("RecoveryPolicy.LightweightRetryDelays[%d] must be positive (got %s)", i, delay))
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("%w: %w", ErrInvalidConfig, errors.Join(errs...))
+	}
+	return nil
 }
 
 func (w *Watcher) startSelf() error {
@@ -229,8 +296,7 @@ func (w *Watcher) StartWm(varName string) error {
 	if !ok {
 		return fmt.Errorf("watchMachine not found: %s", varName)
 	}
-	machine.Start()
-	return nil
+	return machine.Start()
 }
 
 // StopWm stops a specific WatchMachine by varName.
@@ -239,8 +305,7 @@ func (w *Watcher) StopWm(varName string) error {
 	if !ok {
 		return fmt.Errorf("watchMachine not found: %s", varName)
 	}
-	machine.Stop()
-	return nil
+	return machine.Stop()
 }
 
 // KillWm forcefully terminates a specific WatchMachine by varName.
@@ -249,8 +314,7 @@ func (w *Watcher) KillWm(varName string) error {
 	if !ok {
 		return fmt.Errorf("watchMachine not found: %s", varName)
 	}
-	machine.Kill()
-	return nil
+	return machine.Kill()
 }
 
 // SendMessage sends a user message to the managed function.
@@ -372,17 +436,23 @@ func (w *Watcher) waitForTerminalOrContext(ctx context.Context) (ControlState, e
 }
 
 func (w *Watcher) stopAllWatches(ctx context.Context) error {
-	done := make(chan struct{})
+	done := make(chan error, 1)
 	go func() {
+		var errs []error
 		w.machineRegistry.Range(func(varName string, machine *wm.WatchMachine) bool {
-			machine.Stop()
+			if err := machine.Stop(); err != nil {
+				errs = append(errs, fmt.Errorf("%s: %w", varName, err))
+			}
 			return true
 		})
-		close(done)
+		done <- errors.Join(errs...)
 	}()
 
 	select {
-	case <-done:
+	case err := <-done:
+		if err != nil {
+			return err
+		}
 		fmt.Println("[Watcher] All watches stopped successfully")
 		return nil
 	case <-time.After(1 * time.Minute):

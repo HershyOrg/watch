@@ -199,7 +199,7 @@ func (ca *configAdapter) GetMaxMemoEntries() int {
 
 // startAPIServer starts the HTTP API server (non-blocking).
 func (w *Watcher) startAPIServer() (*watcherAPIServer, error) {
-	if w.config.ServerPort == 0 {
+	if w.config.DisableAPIServer {
 		return nil, nil
 	}
 
