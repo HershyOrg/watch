@@ -50,8 +50,8 @@ type PricePoint struct {
 // Trade represents a single trade execution (dry-run)
 type Trade struct {
 	Time           time.Time
-	Symbol         string  // "BTC" or "ETH"
-	Action         string  // "BUY" or "SELL"
+	Symbol         string // "BTC" or "ETH"
+	Action         string // "BUY" or "SELL"
 	Price          float64
 	Amount         float64
 	USDValue       float64

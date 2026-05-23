@@ -1,6 +1,5 @@
 package wm
 
-
 // LoopState는 WatchLoop의 상태임
 type LoopState interface {
 	LoopState()

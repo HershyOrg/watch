@@ -41,19 +41,19 @@ func (e *CleanupEffect) String() string {
 // RecoverEffect tells the MgrFuncRunner to attempt recovery.
 type RecoverEffect struct{}
 
-func (e *RecoverEffect) effectMarker() {}
+func (e *RecoverEffect) effectMarker()  {}
 func (e *RecoverEffect) String() string { return "RecoverEffect" }
 
 // DirectKillEffect tells the MgrFuncRunner to transition to Killed without cleanup.
 type DirectKillEffect struct{}
 
-func (e *DirectKillEffect) effectMarker() {}
+func (e *DirectKillEffect) effectMarker()  {}
 func (e *DirectKillEffect) String() string { return "DirectKillEffect" }
 
 // DirectCrashEffect tells the MgrFuncRunner to transition to Crashed without cleanup.
 type DirectCrashEffect struct{}
 
-func (e *DirectCrashEffect) effectMarker() {}
+func (e *DirectCrashEffect) effectMarker()  {}
 func (e *DirectCrashEffect) String() string { return "DirectCrashEffect" }
 
 // EffectResult represents the result of executing an effect.

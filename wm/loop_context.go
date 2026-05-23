@@ -2,7 +2,6 @@ package wm
 
 import "context"
 
-
 // CallContext는 RunContext와 동일함.
 // CallContext타입을 요구하는 곳에는, RunContext를 집어넣음.
 // 다만 의미론의 이유에서 RunContext의 별명으로써 CallContext를 정의함.

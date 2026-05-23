@@ -41,7 +41,6 @@ type RecoveryRequested struct{}
 
 func (r *RecoveryRequested) LoopEvent() {}
 
-
 // WmCheckedAllSubscribers 는 WatchMachine이 자신의 구독자들 상태를
 // GC루틴으로 체크한 사건이다.
 // 구독자들의 상태를 보고한다.

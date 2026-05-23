@@ -1,6 +1,5 @@
 *.txt
-*_test.go
-*.md
 *.log
 *.json
 *.jsonl
+*.md
