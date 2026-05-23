@@ -34,9 +34,8 @@ type LoggerInterface interface {
 
 // SignalsInterface defines methods needed from manager.SignalChannels
 type SignalsInterface interface {
-	GetVarSigCount() int
-	GetUserSigCount() int
-	GetManagerSigCount() int
+	GetUserPending() int
+	GetControlPending() int
 	// For peek functionality
 	PeekSignals(maxCount int) []SignalEntry
 }
@@ -94,10 +93,18 @@ func NewWatcherAPIHandlers(
 	}
 }
 
+func writeJSON(w http.ResponseWriter, status int, value any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(value)
+}
+
+func writeJSONError(w http.ResponseWriter, status int, message string) {
+	writeJSON(w, status, ErrorResponse{Error: message})
+}
+
 // HandleStatus handles GET /watcher/status
 func (h *WatcherAPIHandlers) HandleStatus(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
 	uptime := time.Since(h.startTime).String()
 
 	response := StatusResponse{
@@ -107,13 +114,11 @@ func (h *WatcherAPIHandlers) HandleStatus(w http.ResponseWriter, r *http.Request
 		LastUpdate: time.Now(),
 	}
 
-	json.NewEncoder(w).Encode(response)
+	writeJSON(w, http.StatusOK, response)
 }
 
 // HandleLogs handles GET /watcher/logs?type=X&limit=N
 func (h *WatcherAPIHandlers) HandleLogs(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
 	logType := r.URL.Query().Get("type")
 	if logType == "" {
 		logType = "all"
@@ -157,11 +162,11 @@ func (h *WatcherAPIHandlers) HandleLogs(w http.ResponseWriter, r *http.Request) 
 		response.StateFaultLogs = h.limitStateFaultLogs(logger.GetStateTransitionFaultLog(), limit)
 		response.EffectResults = h.limitEffectResults(logger.GetEffectResults(), limit)
 	default:
-		http.Error(w, fmt.Sprintf("invalid log type: %s", logType), http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, fmt.Sprintf("invalid log type: %s", logType))
 		return
 	}
 
-	json.NewEncoder(w).Encode(response)
+	writeJSON(w, http.StatusOK, response)
 }
 
 // Helper functions to limit log entries
@@ -209,68 +214,51 @@ func (h *WatcherAPIHandlers) limitEffectResults(logs []interface{}, limit int) [
 
 // HandleSignals handles GET /watcher/signals
 func (h *WatcherAPIHandlers) HandleSignals(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
 	signals := h.getSignals()
 
-	varCount := signals.GetVarSigCount()
-	userCount := signals.GetUserSigCount()
-	managerCount := signals.GetManagerSigCount()
+	userPending := signals.GetUserPending()
+	controlPending := signals.GetControlPending()
 
 	// Peek recent signals (max 30)
 	recentSignals := signals.PeekSignals(30)
 
 	response := SignalsResponse{
-		VarSigCount:     varCount,
-		UserSigCount:    userCount,
-		ManagerSigCount: managerCount,
-		TotalPending:    varCount + userCount + managerCount,
-		RecentSignals:   recentSignals,
-		Timestamp:       time.Now(),
+		UserPending:    userPending,
+		ControlPending: controlPending,
+		RecentSignals:  recentSignals,
 	}
 
-	json.NewEncoder(w).Encode(response)
+	writeJSON(w, http.StatusOK, response)
 }
 
 // HandleMessage handles POST /watcher/message
 func (h *WatcherAPIHandlers) HandleMessage(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
 	var req MessageRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		errResp := ErrorResponse{Error: fmt.Sprintf("invalid request body: %v", err)}
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(errResp)
+		writeJSONError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %v", err))
 		return
 	}
 
 	if req.Content == "" {
-		errResp := ErrorResponse{Error: "message content cannot be empty"}
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(errResp)
+		writeJSONError(w, http.StatusBadRequest, "message content cannot be empty")
 		return
 	}
 
 	if err := h.sendMessage(req.Content); err != nil {
-		errResp := ErrorResponse{Error: fmt.Sprintf("failed to send message: %v", err)}
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(errResp)
+		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to send message: %v", err))
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "message sent"})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "message sent"})
 }
 
 // HandleWatching handles GET /watcher/watching
 func (h *WatcherAPIHandlers) HandleWatching(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
 	manager := h.getManager()
 	watchRegistry := manager.GetWatchRegistry()
 	watchedVars := watchRegistry.GetAllVarNames()
@@ -281,13 +269,11 @@ func (h *WatcherAPIHandlers) HandleWatching(w http.ResponseWriter, r *http.Reque
 		Timestamp:   time.Now(),
 	}
 
-	json.NewEncoder(w).Encode(response)
+	writeJSON(w, http.StatusOK, response)
 }
 
 // HandleMemoCache handles GET /watcher/memoCache
 func (h *WatcherAPIHandlers) HandleMemoCache(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
 	manager := h.getManager()
 	memoCache := manager.GetMemoCache()
 	entries := memoCache.GetAllEntries()
@@ -298,13 +284,11 @@ func (h *WatcherAPIHandlers) HandleMemoCache(w http.ResponseWriter, r *http.Requ
 		Timestamp: time.Now(),
 	}
 
-	json.NewEncoder(w).Encode(response)
+	writeJSON(w, http.StatusOK, response)
 }
 
 // HandleVarState handles GET /watcher/varState
 func (h *WatcherAPIHandlers) HandleVarState(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
 	varState := h.getVarState()
 	variables := varState.GetAll()
 
@@ -314,13 +298,11 @@ func (h *WatcherAPIHandlers) HandleVarState(w http.ResponseWriter, r *http.Reque
 		Timestamp: time.Now(),
 	}
 
-	json.NewEncoder(w).Encode(response)
+	writeJSON(w, http.StatusOK, response)
 }
 
 // HandleConfig handles GET /watcher/config
 func (h *WatcherAPIHandlers) HandleConfig(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
 	config := h.getConfig()
 
 	configData := WatcherConfigData{
@@ -335,5 +317,5 @@ func (h *WatcherAPIHandlers) HandleConfig(w http.ResponseWriter, r *http.Request
 		Timestamp: time.Now(),
 	}
 
-	json.NewEncoder(w).Encode(response)
+	writeJSON(w, http.StatusOK, response)
 }

@@ -24,14 +24,14 @@ type TradingSimulator struct {
 
 // Portfolio represents the current holdings
 type Portfolio struct {
-	InitialUSD    float64
-	CurrentUSD    float64
-	BTCAmount     float64
-	ETHAmount     float64
-	BTCAvgPrice   float64
-	ETHAvgPrice   float64
-	CurrentBTC    float64 // Current BTC price
-	CurrentETH    float64 // Current ETH price
+	InitialUSD  float64
+	CurrentUSD  float64
+	BTCAmount   float64
+	ETHAmount   float64
+	BTCAvgPrice float64
+	ETHAvgPrice float64
+	CurrentBTC  float64 // Current BTC price
+	CurrentETH  float64 // Current ETH price
 }
 
 // PriceHistory stores recent price points for MA calculation
@@ -50,8 +50,8 @@ type PricePoint struct {
 // Trade represents a single trade execution (dry-run)
 type Trade struct {
 	Time           time.Time
-	Symbol         string  // "BTC" or "ETH"
-	Action         string  // "BUY" or "SELL"
+	Symbol         string // "BTC" or "ETH"
+	Action         string // "BUY" or "SELL"
 	Price          float64
 	Amount         float64
 	USDValue       float64

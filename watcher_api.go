@@ -3,6 +3,7 @@ package watch
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -13,8 +14,8 @@ import (
 	"github.com/HershyOrg/watch/wm"
 )
 
-// WatcherAPIServer provides HTTP API for Watcher monitoring and control
-type WatcherAPIServer struct {
+// watcherAPIServer provides HTTP API for Watcher monitoring and control.
+type watcherAPIServer struct {
 	watcher  *Watcher
 	server   *http.Server
 	handlers *api.WatcherAPIHandlers
@@ -84,16 +85,12 @@ type signalsAdapter struct {
 	mgr *manager.Manager
 }
 
-func (sa *signalsAdapter) GetVarSigCount() int {
-	return 0
-}
-
-func (sa *signalsAdapter) GetUserSigCount() int {
+func (sa *signalsAdapter) GetUserPending() int {
 	userCount, _ := sa.mgr.GetSignalQueueLengths()
 	return userCount
 }
 
-func (sa *signalsAdapter) GetManagerSigCount() int {
+func (sa *signalsAdapter) GetControlPending() int {
 	_, controlCount := sa.mgr.GetSignalQueueLengths()
 	return controlCount
 }
@@ -200,10 +197,15 @@ func (ca *configAdapter) GetMaxMemoEntries() int {
 	return ca.config.MaxMemoEntries
 }
 
-// StartAPIServer starts the HTTP API server (non-blocking)
-func (w *Watcher) StartAPIServer() (*WatcherAPIServer, error) {
+// startAPIServer starts the HTTP API server (non-blocking).
+func (w *Watcher) startAPIServer() (*watcherAPIServer, error) {
 	if w.config.ServerPort == 0 {
-		return nil, nil // API disabled
+		return nil, nil
+	}
+
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", w.config.ServerPort))
+	if err != nil {
+		return nil, err
 	}
 
 	// Create adapters
@@ -216,7 +218,7 @@ func (w *Watcher) StartAPIServer() (*WatcherAPIServer, error) {
 	// Create handlers with closures
 	handlers := api.NewWatcherAPIHandlers(
 		func() string {
-			return w.GetState().String()
+			return w.State().String()
 		},
 		func() bool {
 			return w.isRunning.Load()
@@ -261,7 +263,7 @@ func (w *Watcher) StartAPIServer() (*WatcherAPIServer, error) {
 		WriteTimeout: 10 * time.Second,
 	}
 
-	apiServer := &WatcherAPIServer{
+	apiServer := &watcherAPIServer{
 		watcher:  w,
 		server:   server,
 		handlers: handlers,
@@ -270,19 +272,16 @@ func (w *Watcher) StartAPIServer() (*WatcherAPIServer, error) {
 	// Start server in background goroutine
 	go func() {
 		fmt.Printf("[WatcherAPI] Starting HTTP server on :%d\n", w.config.ServerPort)
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
 			fmt.Printf("[WatcherAPI] Server error: %v\n", err)
 		}
 	}()
-
-	// Give server time to start
-	time.Sleep(100 * time.Millisecond)
 
 	return apiServer, nil
 }
 
 // Shutdown gracefully shuts down the API server
-func (s *WatcherAPIServer) Shutdown(ctx context.Context) error {
+func (s *watcherAPIServer) Shutdown(ctx context.Context) error {
 	if s == nil || s.server == nil {
 		return nil
 	}
@@ -292,7 +291,7 @@ func (s *WatcherAPIServer) Shutdown(ctx context.Context) error {
 }
 
 // Close immediately closes the API server without waiting for connections
-func (s *WatcherAPIServer) Close() error {
+func (s *watcherAPIServer) Close() error {
 	if s == nil || s.server == nil {
 		return nil
 	}

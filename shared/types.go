@@ -406,6 +406,9 @@ type WatcherConfig struct {
 	// 0 disables health check. Default: 3 seconds.
 	HealthCheckInterval time.Duration
 
+	// ShutdownTimeout is the maximum time Run allows Stop to finish after ctx cancellation.
+	ShutdownTimeout time.Duration
+
 	// Resource limit settings for long-running stability
 	MaxLogEntries      int // Maximum log entries before circular buffer truncation (default: 50,000)
 	MaxMemoEntries     int // Maximum number of memo cache entries (default: 1,000)
@@ -629,6 +632,7 @@ func DefaultWatcherConfig() WatcherConfig {
 		DefaultTimeout:      1 * time.Minute,
 		RecoveryPolicy:      DefaultRecoveryPolicy(),
 		HealthCheckInterval: 3 * time.Second,
+		ShutdownTimeout:     5 * time.Minute,
 		MaxLogEntries:       50_000,
 		MaxMemoEntries:      1_000,
 		SignalChanCapacity:  50_000,

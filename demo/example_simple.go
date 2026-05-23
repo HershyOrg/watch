@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -60,13 +61,13 @@ func main2() {
 
 	// Start watcher
 	fmt.Println("Starting watcher...")
-	if _, err := watcher.StartAndWait(); err != nil {
+	if err := watcher.Start(); err != nil {
 		panic(err)
 	}
 
 	// Wait for initialization
 	time.Sleep(200 * time.Millisecond)
-	fmt.Printf("Watcher state: %s\n\n", watcher.GetState())
+	fmt.Printf("Watcher state: %s\n\n", watcher.State())
 
 	// Send messages to trigger executions
 	fmt.Println("Sending message 1...")
@@ -83,10 +84,10 @@ func main2() {
 
 	// Print logger summary
 	fmt.Println("\n=== Execution Summary ===")
-	watcher.GetLogger().PrintSummary()
+	watcher.Logger().PrintSummary()
 
 	// Stop watcher
-	if err := watcher.StopAll(); err != nil {
+	if err := watcher.Stop(context.Background()); err != nil {
 		fmt.Printf("Error stopping watcher: %v\n", err)
 	}
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -248,20 +249,20 @@ func main() {
 
 	// Start watcher
 	fmt.Println("Starting trading bot...")
-	fmt.Printf("  [Before Start] State: %s\n", watcher.GetState())
+	fmt.Printf("  [Before Start] State: %s\n", watcher.State())
 
 	go func() {
 		// Check state immediately after Start
-		fmt.Printf("  [After Start] State: %s\n", watcher.GetState())
+		fmt.Printf("  [After Start] State: %s\n", watcher.State())
 
 		// Wait for initialization and check states during startup
 		time.Sleep(300 * time.Millisecond)
-		fmt.Printf("  [+300ms] State: %s\n", watcher.GetState())
+		fmt.Printf("  [+300ms] State: %s\n", watcher.State())
 
 		time.Sleep(500 * time.Millisecond)
-		fmt.Printf("  [+800ms] State: %s\n", watcher.GetState())
+		fmt.Printf("  [+800ms] State: %s\n", watcher.State())
 
-		fmt.Printf("\n✅ Trading bot started (State: %s)\n", watcher.GetState())
+		fmt.Printf("\n✅ Trading bot started (State: %s)\n", watcher.State())
 		fmt.Println("📡 WatcherAPI Server: http://localhost:8080")
 
 		// Test WatcherAPI endpoints with state checks
@@ -273,51 +274,51 @@ func main() {
 		fmt.Println(strings.Repeat("=", 60))
 		fmt.Println("Simulating User Commands...")
 		fmt.Println(strings.Repeat("=", 60))
-		fmt.Printf("  [During Operation] State: %s\n", watcher.GetState())
+		fmt.Printf("  [During Operation] State: %s\n", watcher.State())
 
 		time.Sleep(2 * time.Second)
 		fmt.Println("\n→ Sending 'status' command...")
-		fmt.Printf("  [Before 'status'] State: %s\n", watcher.GetState())
+		fmt.Printf("  [Before 'status'] State: %s\n", watcher.State())
 		watcher.SendMessage("status")
 
 		time.Sleep(2 * time.Second)
 		fmt.Println("\n→ Sending 'pause' command...")
-		fmt.Printf("  [Before 'pause'] State: %s\n", watcher.GetState())
+		fmt.Printf("  [Before 'pause'] State: %s\n", watcher.State())
 		watcher.SendMessage("pause")
 
 		time.Sleep(1 * time.Second)
 		fmt.Println("\n→ Sending 'resume' command...")
-		fmt.Printf("  [Before 'resume'] State: %s\n", watcher.GetState())
+		fmt.Printf("  [Before 'resume'] State: %s\n", watcher.State())
 		watcher.SendMessage("resume")
 
 		time.Sleep(2 * time.Second)
 		fmt.Println("\n→ Sending 'stop' command...")
-		fmt.Printf("  [Before 'stop'] State: %s\n", watcher.GetState())
+		fmt.Printf("  [Before 'stop'] State: %s\n", watcher.State())
 		watcher.SendMessage("stop")
 
 		// Wait for shutdown
 		time.Sleep(500 * time.Millisecond)
-		fmt.Printf("  [+500ms after 'stop'] State: %s\n", watcher.GetState())
+		fmt.Printf("  [+500ms after 'stop'] State: %s\n", watcher.State())
 
 		time.Sleep(500 * time.Millisecond)
-		fmt.Printf("  [+1000ms after 'stop'] State: %s\n", watcher.GetState())
+		fmt.Printf("  [+1000ms after 'stop'] State: %s\n", watcher.State())
 
 		// Print logger summary
 		fmt.Println()
 		fmt.Println(strings.Repeat("=", 60))
 		fmt.Println("Execution Summary")
 		fmt.Println(strings.Repeat("=", 60))
-		watcher.GetLogger().PrintSummary()
+		watcher.Logger().PrintSummary()
 
 		// Stop watcher
-		fmt.Printf("\n[Before watcher.StopAll()] State: %s\n", watcher.GetState())
-		if err := watcher.StopAll(); err != nil {
+		fmt.Printf("\n[Before watcher.Stop(context.Background())] State: %s\n", watcher.State())
+		if err := watcher.Stop(context.Background()); err != nil {
 			fmt.Printf("Error stopping: %v\n", err)
 		}
-		fmt.Printf("[After watcher.StopAll()] State: %s\n", watcher.GetState())
+		fmt.Printf("[After watcher.Stop(context.Background())] State: %s\n", watcher.State())
 	}()
 
-	if _, err := watcher.StartAndWait(); err != nil {
+	if _, err := watcher.Run(context.Background()); err != nil {
 		panic(err)
 	}
 

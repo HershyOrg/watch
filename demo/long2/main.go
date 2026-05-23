@@ -1,7 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/HershyOrg/watch"
@@ -20,23 +24,28 @@ func main() {
 	}).Cleanup(logic.CleanupReducer)
 
 	fmt.Println("\n▶️  Press Ctrl+C to stop | Auto-stop after 10 minutes")
-	result, err := watcher.StartAndWait(
-		watch.WithTimeout(10*time.Minute),
-		watch.WithInterrupt(),
-	)
+
+	interruptCtx, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopSignals()
+	runCtx, cancel := context.WithTimeout(interruptCtx, 10*time.Minute)
+	defer cancel()
+
+	state, err := watcher.Run(runCtx)
 	if err != nil {
 		fmt.Printf("❌ Failed: %v\n", err)
 		return
 	}
 
-	switch result.Reason {
-	case watch.WaitReasonTimeout:
+	switch {
+	case runCtx.Err() == context.DeadlineExceeded:
 		fmt.Println("\n⏰ Target duration reached")
-	case watch.WaitReasonSignal:
+	case interruptCtx.Err() != nil:
 		fmt.Println("\n🛑 Stopped gracefully")
 	default:
-		fmt.Printf("\nEnded: %s (%s)\n", result.State, result.Reason)
+		fmt.Printf("\nEnded: %s\n", state)
 	}
 
-	watcher.GetLogger().PrintSummary()
+	if logger := watcher.Logger(); logger != nil {
+		logger.PrintSummary()
+	}
 }

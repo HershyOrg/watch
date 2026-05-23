@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -74,18 +75,18 @@ func main1() {
 		// Wait for reactive executions triggered by WatchCall
 		time.Sleep(3 * time.Second)
 
-		fmt.Printf("\nFinal state: %s\n", watcher.GetState())
+		fmt.Printf("\nFinal state: %s\n", watcher.State())
 
 		// Print summary
 		fmt.Println("\n=== Execution Summary ===")
-		watcher.GetLogger().PrintSummary()
+		watcher.Logger().PrintSummary()
 
-		if err := watcher.StopAll(); err != nil {
+		if err := watcher.Stop(context.Background()); err != nil {
 			fmt.Printf("Error stopping: %v\n", err)
 		}
 	}()
 
-	if _, err := watcher.StartAndWait(); err != nil {
+	if _, err := watcher.Run(context.Background()); err != nil {
 		panic(err)
 	}
 

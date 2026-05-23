@@ -92,7 +92,7 @@ func (sc *SignalChannels) PeekSignals(maxCount int) []SignalPeekEntry {
 	controlEvents := sc.controlQueue.Peek(maxCount / 2)
 	for _, sig := range controlEvents {
 		entries = append(entries, SignalPeekEntry{
-			Type:      "watcher",
+			Type:      "control",
 			Content:   sig.String(),
 			CreatedAt: sig.CreatedAt(),
 		})
