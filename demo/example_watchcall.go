@@ -75,11 +75,11 @@ func main1() {
 		// Wait for reactive executions triggered by WatchCall
 		time.Sleep(3 * time.Second)
 
-		fmt.Printf("\nFinal state: %s\n", watcher.State())
+		fmt.Printf("\nFinal state: %s\n", watcherStateString(watcher))
 
 		// Print summary
 		fmt.Println("\n=== Execution Summary ===")
-		watcher.Logger().PrintSummary()
+		printWatcherSummary(watcher)
 
 		if err := watcher.Stop(context.Background()); err != nil {
 			fmt.Printf("Error stopping: %v\n", err)

@@ -98,7 +98,7 @@ func (w *Watcher) Run(ctx context.Context) (ControlState, error) {
 	}
 
 	if err := w.Start(); err != nil {
-		return w.State(), err
+		return w.currentState(), err
 	}
 
 	state, err := w.waitForTerminalOrContext(ctx)
@@ -120,10 +120,10 @@ func (w *Watcher) Run(ctx context.Context) (ControlState, error) {
 	defer cancel()
 
 	if stopErr := w.Stop(shutdownCtx); stopErr != nil {
-		return w.State(), stopErr
+		return w.currentState(), stopErr
 	}
 
-	return w.State(), nil
+	return w.currentState(), nil
 }
 
 func (w *Watcher) startSelf() error {
@@ -255,11 +255,11 @@ func (w *Watcher) KillWm(varName string) error {
 
 // SendMessage sends a user message to the managed function.
 func (w *Watcher) SendMessage(content string) error {
-	if !w.isRunning.Load() {
-		return ErrWatcherNotRunning
-	}
 	if w.manager == nil {
 		return ErrNoManagedFunction
+	}
+	if !w.isRunning.Load() {
+		return ErrWatcherNotRunning
 	}
 
 	msg := &Message{
@@ -272,19 +272,26 @@ func (w *Watcher) SendMessage(content string) error {
 }
 
 // State returns the current ControlState.
-func (w *Watcher) State() ControlState {
+func (w *Watcher) State() (ControlState, error) {
 	if w.manager == nil {
-		return &ControlIdle{}
+		return nil, ErrNoManagedFunction
 	}
-	return w.manager.GetControlState()
+	return w.currentState(), nil
 }
 
 // Logger returns the Watcher's logger for inspection.
-func (w *Watcher) Logger() *manager.Logger {
+func (w *Watcher) Logger() (*manager.Logger, error) {
+	if w.manager == nil {
+		return nil, ErrNoManagedFunction
+	}
+	return w.manager.GetLogger(), nil
+}
+
+func (w *Watcher) currentState() ControlState {
 	if w.manager == nil {
 		return nil
 	}
-	return w.manager.GetLogger()
+	return w.manager.GetControlState()
 }
 
 // GetManager returns the internal Manager for testing purposes.
@@ -351,12 +358,15 @@ func (w *Watcher) waitForTerminalOrContext(ctx context.Context) (ControlState, e
 	for {
 		select {
 		case <-ticker.C:
-			state := w.State()
+			state := w.currentState()
+			if state == nil {
+				return nil, ErrNoManagedFunction
+			}
 			if state.IsTerminal() {
 				return state, nil
 			}
 		case <-ctx.Done():
-			return w.State(), ctx.Err()
+			return w.currentState(), ctx.Err()
 		}
 	}
 }

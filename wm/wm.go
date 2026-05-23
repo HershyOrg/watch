@@ -83,7 +83,7 @@ type WatchMachineConfig struct {
 }
 
 // NewWatchMachine은 WatchMachine을 생성하고 이벤트 루프를 시작함.
-func NewWatchMachine(cfg WatchMachinegConfig) *WatchMachine {
+func NewWatchMachine(cfg WatchMachineConfig) *WatchMachine {
 	// RecoveryPolicy 기본값 적용
 	if cfg.RecoveryPolicy.MaxConsecutiveFailures == 0 {
 		cfg.RecoveryPolicy = DefaultLoopRecoveryPolicy()

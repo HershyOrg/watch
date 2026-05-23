@@ -45,7 +45,7 @@ func main() {
 		fmt.Printf("\nEnded: %s\n", state)
 	}
 
-	if logger := watcher.Logger(); logger != nil {
+	if logger, err := watcher.Logger(); err == nil && logger != nil {
 		logger.PrintSummary()
 	}
 }

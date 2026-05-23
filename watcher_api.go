@@ -217,8 +217,12 @@ func (w *Watcher) startAPIServer() (*watcherAPIServer, error) {
 
 	// Create handlers with closures
 	handlers := api.NewWatcherAPIHandlers(
-		func() string {
-			return w.State().String()
+		func() (string, error) {
+			state, err := w.State()
+			if err != nil {
+				return "", err
+			}
+			return state.String(), nil
 		},
 		func() bool {
 			return w.isRunning.Load()

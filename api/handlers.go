@@ -11,7 +11,7 @@ import (
 // WatcherAPIHandlers provides HTTP handlers for WatcherServer API
 type WatcherAPIHandlers struct {
 	// Using interface{} to avoid circular dependency with hersh package
-	getState    func() string
+	getState    func() (string, error)
 	isRunning   func() bool
 	getLogger   func() LoggerInterface
 	getSignals  func() SignalsInterface
@@ -71,7 +71,7 @@ type ConfigInterface interface {
 
 // NewWatcherAPIHandlers creates a new API handlers instance
 func NewWatcherAPIHandlers(
-	getState func() string,
+	getState func() (string, error),
 	isRunning func() bool,
 	getLogger func() LoggerInterface,
 	getSignals func() SignalsInterface,
@@ -105,10 +105,16 @@ func writeJSONError(w http.ResponseWriter, status int, message string) {
 
 // HandleStatus handles GET /watcher/status
 func (h *WatcherAPIHandlers) HandleStatus(w http.ResponseWriter, r *http.Request) {
+	state, err := h.getState()
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to get watcher state: %v", err))
+		return
+	}
+
 	uptime := time.Since(h.startTime).String()
 
 	response := StatusResponse{
-		State:      h.getState(),
+		State:      state,
 		IsRunning:  h.isRunning(),
 		Uptime:     uptime,
 		LastUpdate: time.Now(),

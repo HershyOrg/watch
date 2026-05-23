@@ -67,7 +67,7 @@ func main2() {
 
 	// Wait for initialization
 	time.Sleep(200 * time.Millisecond)
-	fmt.Printf("Watcher state: %s\n\n", watcher.State())
+	fmt.Printf("Watcher state: %s\n\n", watcherStateString(watcher))
 
 	// Send messages to trigger executions
 	fmt.Println("Sending message 1...")
@@ -84,7 +84,7 @@ func main2() {
 
 	// Print logger summary
 	fmt.Println("\n=== Execution Summary ===")
-	watcher.Logger().PrintSummary()
+	printWatcherSummary(watcher)
 
 	// Stop watcher
 	if err := watcher.Stop(context.Background()); err != nil {
