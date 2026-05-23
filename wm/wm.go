@@ -2,6 +2,7 @@ package wm
 
 import (
 	"context"
+	"reflect"
 	"time"
 
 	"github.com/HershyOrg/watch/shared"
@@ -15,6 +16,7 @@ type WatchMachine struct {
 
 	//WatchXXX설정 보관
 	WatchType             WatchType
+	Contract              WatchContract
 	GetRawCallHandleOrNil GetRawCallHandleFunc
 	GetRawFlowHandleOrNil GetRawFlowHandleFunc
 
@@ -72,10 +74,19 @@ const (
 	WatchCallType WatchType = "WatchCallType"
 )
 
+// WatchContract identifies the setup that owns a varName.
+type WatchContract struct {
+	VarName        string
+	WatchType      WatchType
+	ValueType      reflect.Type
+	RegistrationPC uintptr
+}
+
 // WatchMachineConfig는 WatchMachine 생성에 필요한 설정임.
 type WatchMachineConfig struct {
 	VarName               string
 	WatchType             WatchType
+	Contract              WatchContract
 	GetRawCallHandleOrNil GetRawCallHandleFunc
 	GetRawFlowHandleOrNil GetRawFlowHandleFunc
 	LoopCtxConfig         LoopContextConfig
@@ -101,6 +112,7 @@ func NewWatchMachine(cfg WatchMachineConfig) *WatchMachine {
 	wm := &WatchMachine{
 		VarName:               cfg.VarName,
 		WatchType:             cfg.WatchType,
+		Contract:              cfg.Contract,
 		GetRawCallHandleOrNil: cfg.GetRawCallHandleOrNil,
 		GetRawFlowHandleOrNil: cfg.GetRawFlowHandleOrNil,
 		loopReducer: LoopReducer{
