@@ -306,24 +306,21 @@ func main() {
 		time.Sleep(500 * time.Millisecond)
 		fmt.Printf("  [+1000ms after 'stop'] State: %s\n", watcherStateString(watcher))
 
-		// Print logger summary
-		fmt.Println()
-		fmt.Println(strings.Repeat("=", 60))
-		fmt.Println("Execution Summary")
-		fmt.Println(strings.Repeat("=", 60))
-		printWatcherSummary(watcher)
-
-		// Stop watcher
-		fmt.Printf("\n[Before watcher.Stop(context.Background())] State: %s\n", watcherStateString(watcher))
-		if err := watcher.Stop(context.Background()); err != nil {
-			fmt.Printf("Error stopping: %v\n", err)
-		}
-		fmt.Printf("[After watcher.Stop(context.Background())] State: %s\n", watcherStateString(watcher))
 	}()
 
-	if _, err := watcher.Run(context.Background()); err != nil {
+	state, err := watcher.Run(context.Background())
+	if err != nil {
 		panic(err)
 	}
+
+	fmt.Printf("\n[After watcher.Run] State: %s\n", state)
+
+	// Print logger summary
+	fmt.Println()
+	fmt.Println(strings.Repeat("=", 60))
+	fmt.Println("Execution Summary")
+	fmt.Println(strings.Repeat("=", 60))
+	printWatcherSummary(watcher)
 
 	fmt.Println("\n=== Demo Complete ===")
 }
