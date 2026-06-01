@@ -240,15 +240,15 @@ func main() {
 	}
 
 	// Create environment variables for managed function
-	envVars := map[string]any{
+	configValues := map[string]any{
 		"API_KEY":        "demo-api-key-12345",
 		"BUY_THRESHOLD":  "44500.00",
 		"SELL_THRESHOLD": "45500.00",
 		"MAX_POSITION":   "10000.00",
 	}
 
-	// Register global trading function with envVars and cleanup
-	watcher.Manage(tradingFunc, "tradingBot", envVars).Cleanup(cleanupFunc)
+	// Register global trading function with configValues and cleanup
+	watcher.Manage(tradingFunc, "tradingBot", configValues).Cleanup(cleanupFunc)
 
 	// Start watcher
 	fmt.Println("Starting trading bot...")

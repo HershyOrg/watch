@@ -96,17 +96,34 @@ func DelcaredLogic(msg *watch.Message, ctx watch.ManageContext) (watch.ControlSi
 	// 사용자 명령
 	switch msg.Content {
 	case "":
-	case "status", "s":
+	case "status":
 		p := simulator.GetPortfolio()
 		watch.PrintWithLog(fmt.Sprintf(
 			"📊 BTC=$%.2f ETH=$%.2f | Portfolio: $%.2f (%.2f%%) | Trading: %v",
 			btcHV.Value, ethHV.Value, p.CurrentValue, p.ProfitLossPercent, !simulator.IsPaused()), ctx)
-	case "portfolio", "p":
+	case "s":
+		p := simulator.GetPortfolio()
+		watch.PrintWithLog(fmt.Sprintf(
+			"📊 BTC=$%.2f ETH=$%.2f | Portfolio: $%.2f (%.2f%%) | Trading: %v",
+			btcHV.Value, ethHV.Value, p.CurrentValue, p.ProfitLossPercent, !simulator.IsPaused()), ctx)
+	case "portfolio":
 		p := simulator.GetPortfolio()
 		watch.PrintWithLog(fmt.Sprintf(
 			"💼 $%.2f (%.2f%%) | BTC: %.6f ETH: %.6f | Cash: $%.2f",
 			p.CurrentValue, p.ProfitLossPercent, p.BTCAmount, p.ETHAmount, p.CurrentUSD), ctx)
-	case "trades", "t":
+	case "p":
+		p := simulator.GetPortfolio()
+		watch.PrintWithLog(fmt.Sprintf(
+			"💼 $%.2f (%.2f%%) | BTC: %.6f ETH: %.6f | Cash: $%.2f",
+			p.CurrentValue, p.ProfitLossPercent, p.BTCAmount, p.ETHAmount, p.CurrentUSD), ctx)
+	case "trades":
+		trades := simulator.GetTrades()
+		start := max(len(trades)-10, 0)
+		for _, t := range trades[start:] {
+			watch.PrintWithLog(fmt.Sprintf("   %s %s %s: %.6f @ $%.2f (%s)",
+				t.Time.Format("15:04:05"), t.Action, t.Symbol, t.Amount, t.Price, t.Reason), ctx)
+		}
+	case "t":
 		trades := simulator.GetTrades()
 		start := max(len(trades)-10, 0)
 		for _, t := range trades[start:] {
@@ -119,7 +136,11 @@ func DelcaredLogic(msg *watch.Message, ctx watch.ManageContext) (watch.ControlSi
 	case "resume":
 		simulator.Resume()
 		watch.PrintWithLog("▶️  Trading resumed", ctx)
-	case "help", "h", "?":
+	case "help":
+		watch.PrintWithLog("Commands: status | portfolio | trades | pause | resume | help", ctx)
+	case "h":
+		watch.PrintWithLog("Commands: status | portfolio | trades | pause | resume | help", ctx)
+	case "?":
 		watch.PrintWithLog("Commands: status | portfolio | trades | pause | resume | help", ctx)
 	default:
 		watch.PrintWithLog("❌ Unknown command (type 'help')", ctx)

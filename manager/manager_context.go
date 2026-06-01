@@ -16,10 +16,10 @@ type ContextLogger interface {
 }
 
 // contextEntry is a single entry in the unified value store.
-// frozen entries (injected via SetFrozenValues) cannot be overwritten by SetValue/UpdateValue.
+// Config value entries cannot be overwritten by SetValue/UpdateValue.
 type contextEntry struct {
-	value  any
-	frozen bool
+	value       any
+	configValue bool
 }
 
 // ManageContext implements shared.ManageContext interface.
@@ -93,7 +93,7 @@ func (mc *ManageContext) SetValue(key string, value any) {
 	mc.valuesMutex.Lock()
 	defer mc.valuesMutex.Unlock()
 
-	if entry, exists := mc.valueStore[key]; exists && entry.frozen {
+	if entry, exists := mc.valueStore[key]; exists && entry.configValue {
 		return
 	}
 
@@ -114,7 +114,7 @@ func (mc *ManageContext) UpdateValue(key string, updateFn func(current any) any)
 	defer mc.valuesMutex.Unlock()
 
 	entry := mc.valueStore[key]
-	if entry.frozen {
+	if entry.configValue {
 		return entry.value
 	}
 
@@ -162,17 +162,17 @@ func (mc *ManageContext) UpdateContext(ctx context.Context) {
 	mc.ctx = ctx
 }
 
-// SetFrozenValues injects immutable values into the store.
-// Frozen entries cannot be overwritten by SetValue/UpdateValue.
+// SetConfigValues injects immutable configuration values into the store.
+// Config value entries cannot be overwritten by SetValue/UpdateValue.
 // This should only be called during initialization (by Manager creation).
-func (mc *ManageContext) SetFrozenValues(values map[string]any) {
+func (mc *ManageContext) SetConfigValues(values map[string]any) {
 	mc.valuesMutex.Lock()
 	defer mc.valuesMutex.Unlock()
 
 	for k, v := range values {
-		mc.valueStore[k] = contextEntry{value: v, frozen: true}
+		mc.valueStore[k] = contextEntry{value: v, configValue: true}
 		if mc.logger != nil {
-			mc.logger.LogContextValue(k, nil, v, "frozen_initialized")
+			mc.logger.LogContextValue(k, nil, v, "config_initialized")
 		}
 	}
 }

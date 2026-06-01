@@ -14,6 +14,29 @@ import (
 
 var a = "a"
 
+const (
+	demoExchangeAPIKey    = "DEMO_EXCHANGE_API_KEY"
+	demoExchangeAccountID = "DEMO_EXCHANGE_ACCOUNT_ID"
+)
+
+type DemoExchangeSession struct {
+	label string
+}
+
+func NewDemoExchangeSession(apiKey, accountID string) *DemoExchangeSession {
+	return &DemoExchangeSession{
+		label: fmt.Sprintf("paper-exchange/account-len:%d/key-len:%d", len(accountID), len(apiKey)),
+	}
+}
+
+func (s *DemoExchangeSession) Status() string {
+	return s.label
+}
+
+func (s *DemoExchangeSession) SubmitDryRunOrder(trade Trade) string {
+	return fmt.Sprintf("%s:%s:%s:%d", trade.Action, trade.Symbol, trade.Reason, len(s.label))
+}
+
 func nonClosure() {
 	defer print(a)
 	print(a)
@@ -76,8 +99,21 @@ func delcaredLogic(msg *watch.Message, ctx watch.ManageContext) (watch.ControlSi
 	simulator := watch.Memo(func() *TradingSimulator {
 		return NewTradingSimulator(10000.0)
 	}, "sim", ctx)
+
+	apiKey, err := watch.ReadEnv(demoExchangeAPIKey)
+	if err != nil {
+		fmt.Println("환경변수 못읽음!")
+		return watch.Crash(err.Error()), err
+	}
+	accountID, err := watch.ReadEnv(demoExchangeAccountID)
+	if err != nil {
+		return watch.Crash(err.Error()), err
+	}
+	paperExchange := NewDemoExchangeSession(apiKey, accountID)
+
 	if msg == nil {
 		msg = &watch.Message{}
+
 	}
 	// 가격 반영
 	if btcHV.IsUpdatedValid() {
@@ -104,6 +140,8 @@ func delcaredLogic(msg *watch.Message, ctx watch.ManageContext) (watch.ControlSi
 		for _, t := range trades {
 			watch.PrintWithLog(fmt.Sprintf("   ⏰ %s %s: %.6f @ $%.2f",
 				t.Action, t.Symbol, t.Amount, t.Price), ctx)
+			watch.PrintWithLog(fmt.Sprintf("      paper exchange receipt: %s",
+				paperExchange.SubmitDryRunOrder(t)), ctx)
 		}
 	}
 
@@ -142,6 +180,8 @@ func delcaredLogic(msg *watch.Message, ctx watch.ManageContext) (watch.ControlSi
 				watch.PrintWithLog(fmt.Sprintf("   %s %s %s: %.6f @ $%.2f (%s)",
 					t.Time.Format("15:04:05"),
 					t.Action, t.Symbol, t.Amount, t.Price, t.Reason), ctx)
+				watch.PrintWithLog(fmt.Sprintf("      paper exchange receipt: %s",
+					paperExchange.SubmitDryRunOrder(t)), ctx)
 			}
 			p := simulator.GetPortfolio()
 			watch.PrintWithLog(fmt.Sprintf("   Portfolio: $%.2f (%.2f%%)",
@@ -152,17 +192,34 @@ func delcaredLogic(msg *watch.Message, ctx watch.ManageContext) (watch.ControlSi
 	// 사용자 명령
 	switch msg.Content {
 	case "":
-	case "status", "s":
+	case "status":
 		p := simulator.GetPortfolio()
 		watch.PrintWithLog(fmt.Sprintf(
-			"📊 BTC=$%.2f ETH=$%.2f | Portfolio: $%.2f (%.2f%%) | Trading: %v",
-			btcHV.Value, ethHV.Value, p.CurrentValue, p.ProfitLossPercent, !simulator.IsPaused()), ctx)
-	case "portfolio", "p":
+			"📊 BTC=$%.2f ETH=$%.2f | Portfolio: $%.2f (%.2f%%) | Trading: %v | Exchange: %s",
+			btcHV.Value, ethHV.Value, p.CurrentValue, p.ProfitLossPercent, !simulator.IsPaused(), paperExchange.Status()), ctx)
+	case "s":
+		p := simulator.GetPortfolio()
+		watch.PrintWithLog(fmt.Sprintf(
+			"📊 BTC=$%.2f ETH=$%.2f | Portfolio: $%.2f (%.2f%%) | Trading: %v | Exchange: %s",
+			btcHV.Value, ethHV.Value, p.CurrentValue, p.ProfitLossPercent, !simulator.IsPaused(), paperExchange.Status()), ctx)
+	case "portfolio":
 		p := simulator.GetPortfolio()
 		watch.PrintWithLog(fmt.Sprintf(
 			"💼 $%.2f (%.2f%%) | BTC: %.6f ETH: %.6f | Cash: $%.2f",
 			p.CurrentValue, p.ProfitLossPercent, p.BTCAmount, p.ETHAmount, p.CurrentUSD), ctx)
-	case "trades", "t":
+	case "p":
+		p := simulator.GetPortfolio()
+		watch.PrintWithLog(fmt.Sprintf(
+			"💼 $%.2f (%.2f%%) | BTC: %.6f ETH: %.6f | Cash: $%.2f",
+			p.CurrentValue, p.ProfitLossPercent, p.BTCAmount, p.ETHAmount, p.CurrentUSD), ctx)
+	case "trades":
+		trades := simulator.GetTrades()
+		start := max(len(trades)-10, 0)
+		for _, t := range trades[start:] {
+			watch.PrintWithLog(fmt.Sprintf("   %s %s %s: %.6f @ $%.2f (%s)",
+				t.Time.Format("15:04:05"), t.Action, t.Symbol, t.Amount, t.Price, t.Reason), ctx)
+		}
+	case "t":
 		trades := simulator.GetTrades()
 		start := max(len(trades)-10, 0)
 		for _, t := range trades[start:] {
@@ -175,7 +232,11 @@ func delcaredLogic(msg *watch.Message, ctx watch.ManageContext) (watch.ControlSi
 	case "resume":
 		simulator.Resume()
 		watch.PrintWithLog("▶️  Trading resumed", ctx)
-	case "help", "h", "?":
+	case "help":
+		watch.PrintWithLog("Commands: status | portfolio | trades | pause | resume | help", ctx)
+	case "h":
+		watch.PrintWithLog("Commands: status | portfolio | trades | pause | resume | help", ctx)
+	case "?":
 		watch.PrintWithLog("Commands: status | portfolio | trades | pause | resume | help", ctx)
 	default:
 		watch.PrintWithLog("❌ Unknown command (type 'help')", ctx)

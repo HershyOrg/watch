@@ -56,7 +56,7 @@ func main2() {
 		return watch.None(), nil
 	}
 
-	// Register managed function with cleanup (no envVars needed)
+	// Register managed function with cleanup (no configValues needed)
 	watcher.Manage(managedFunc, "counterExample", nil).Cleanup(func(ctx watch.ManageContext) {
 		fmt.Println("\n[Cleanup] Watcher is shutting down")
 		fmt.Printf("[Cleanup] Final state - Counter: %d\n", counter)

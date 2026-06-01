@@ -1,0 +1,442 @@
+{
+  "schemaVersion": "watch.tokens.v1",
+  "fieldTypes": {
+    "String": "string value",
+    "StringList": "list of string values",
+    "Expression": "neutral expression value",
+    "DurationExpression": "duration expression value",
+    "TypeExpression": "type expression value",
+    "FunctionRef": "function or handler reference",
+    "KeyValueList": "key/value information list"
+  },
+  "genericFieldTypes": {
+    "Enum<T>": "enum value",
+    "TokenRef<T>": "reference to another Watch token instance",
+    "TokenRefList<T>": "list of Watch token references"
+  },
+  "enums": {
+    "ControlSignal": [
+      "None",
+      "Stop",
+      "Kill",
+      "Crash"
+    ],
+    "HookKind": [
+      "WatchCall",
+      "WatchFlow",
+      "WatchTick",
+      "Memo",
+      "ClearMemo",
+      "ValueStoreAccess",
+      "UserEnvRead"
+    ],
+    "ValueStoreOperation": [
+      "Get",
+      "Set",
+      "Update"
+    ],
+    "MessageCaseKind": [
+      "Literal",
+      "Default"
+    ]
+  },
+  "tokens": {
+    "Watcher": {
+      "group": "Component",
+      "identityStrength": "weak",
+      "singleton": true,
+      "fields": {
+        "Managers": {
+          "type": "TokenRefList<Manager>",
+          "required": true,
+          "description": "Managers owned by the Watcher."
+        },
+        "Name": {
+          "type": "String",
+          "required": false,
+          "description": "Optional display name for the Watcher."
+        },
+        "Lifecycle": {
+          "type": "StringList",
+          "required": false,
+          "description": "Lifecycle calls such as Start, Run, or Stop."
+        }
+      }
+    },
+    "Manager": {
+      "group": "Component",
+      "identityStrength": "strong",
+      "fields": {
+        "Name": {
+          "type": "String",
+          "required": true,
+          "identity": true,
+          "description": "Manager name."
+        },
+        "ManagedFunc": {
+          "type": "FunctionRef",
+          "required": true,
+          "description": "Managed function entry point."
+        },
+        "ConfigValues": {
+          "type": "KeyValueList",
+          "required": false,
+          "description": "Immutable configuration values passed to Manage and exposed through ManageContext value access."
+        },
+        "Messages": {
+          "type": "TokenRefList<MessageDispatch>",
+          "required": false,
+          "description": "Message dispatch tokens owned by the Manager."
+        },
+        "ControlSignals": {
+          "type": "TokenRefList<ControlSignal>",
+          "required": false,
+          "description": "Control signal tokens returned by the Manager."
+        },
+        "Cleanup": {
+          "type": "TokenRef<Cleanup>",
+          "required": false,
+          "description": "Cleanup token attached to the Manager."
+        }
+      }
+    },
+    "Cleanup": {
+      "group": "Component",
+      "identityStrength": "strong",
+      "fields": {
+        "Owner": {
+          "type": "TokenRef<Manager>",
+          "required": true,
+          "identity": true,
+          "description": "Manager that owns this cleanup function."
+        },
+        "CleanupFunc": {
+          "type": "FunctionRef",
+          "required": true,
+          "description": "Cleanup function entry point."
+        }
+      }
+    },
+    "WatchMachine": {
+      "group": "Component",
+      "identityStrength": "strong",
+      "fields": {
+        "Owner": {
+          "type": "TokenRef<Manager>",
+          "required": true,
+          "identity": true,
+          "description": "Manager that owns the WatchMachine."
+        },
+        "Name": {
+          "type": "String",
+          "required": true,
+          "identity": true,
+          "description": "WatchMachine name."
+        },
+        "Kind": {
+          "type": "Enum<HookKind>",
+          "required": true,
+          "description": "Watch API kind that creates or addresses this WatchMachine."
+        },
+        "Handler": {
+          "type": "FunctionRef",
+          "required": false,
+          "description": "Update or flow handler entry point."
+        },
+        "Tick": {
+          "type": "DurationExpression",
+          "required": false,
+          "description": "Tick interval expression."
+        },
+        "InitialValue": {
+          "type": "Expression",
+          "required": false,
+          "description": "Initial value expression."
+        },
+        "ValueType": {
+          "type": "TypeExpression",
+          "required": false,
+          "description": "Observed value type expression."
+        }
+      }
+    },
+    "WatchCall": {
+      "group": "Hook",
+      "identityStrength": "strong",
+      "fields": {
+        "Owner": {
+          "type": "TokenRef<Manager>",
+          "required": true,
+          "identity": true,
+          "description": "Manager that owns this WatchCall."
+        },
+        "Name": {
+          "type": "String",
+          "required": true,
+          "identity": true,
+          "description": "WatchMachine name created or addressed by this WatchCall."
+        },
+        "Handler": {
+          "type": "FunctionRef",
+          "required": true,
+          "description": "WatchCall handler entry point."
+        },
+        "Target": {
+          "type": "TokenRef<WatchMachine>",
+          "required": false,
+          "description": "WatchMachine token created or addressed by this WatchCall."
+        },
+        "InitialValue": {
+          "type": "Expression",
+          "required": false,
+          "description": "Initial value expression."
+        },
+        "Tick": {
+          "type": "DurationExpression",
+          "required": false,
+          "description": "Tick interval expression."
+        }
+      }
+    },
+    "WatchFlow": {
+      "group": "Hook",
+      "identityStrength": "strong",
+      "fields": {
+        "Owner": {
+          "type": "TokenRef<Manager>",
+          "required": true,
+          "identity": true,
+          "description": "Manager that owns this WatchFlow."
+        },
+        "Name": {
+          "type": "String",
+          "required": true,
+          "identity": true,
+          "description": "WatchMachine name created or addressed by this WatchFlow."
+        },
+        "Handler": {
+          "type": "FunctionRef",
+          "required": true,
+          "description": "WatchFlow handler entry point."
+        },
+        "Target": {
+          "type": "TokenRef<WatchMachine>",
+          "required": false,
+          "description": "WatchMachine token created or addressed by this WatchFlow."
+        },
+        "InitialValue": {
+          "type": "Expression",
+          "required": false,
+          "description": "Initial value expression."
+        },
+        "ValueType": {
+          "type": "TypeExpression",
+          "required": false,
+          "description": "Flow value type expression."
+        }
+      }
+    },
+    "WatchTick": {
+      "group": "Hook",
+      "identityStrength": "strong",
+      "fields": {
+        "Owner": {
+          "type": "TokenRef<Manager>",
+          "required": true,
+          "identity": true,
+          "description": "Manager that owns this WatchTick."
+        },
+        "Name": {
+          "type": "String",
+          "required": true,
+          "identity": true,
+          "description": "WatchMachine name created or addressed by this WatchTick."
+        },
+        "Tick": {
+          "type": "DurationExpression",
+          "required": true,
+          "description": "Tick interval expression."
+        },
+        "Target": {
+          "type": "TokenRef<WatchMachine>",
+          "required": false,
+          "description": "WatchMachine token created or addressed by this WatchTick."
+        }
+      }
+    },
+    "Memo": {
+      "group": "Hook",
+      "identityStrength": "strong",
+      "fields": {
+        "Owner": {
+          "type": "TokenRef<Manager>",
+          "required": true,
+          "identity": true,
+          "description": "Manager that owns this Memo."
+        },
+        "Key": {
+          "type": "String",
+          "required": true,
+          "identity": true,
+          "description": "Memo key."
+        },
+        "ValueType": {
+          "type": "TypeExpression",
+          "required": false,
+          "description": "Memo value type expression."
+        }
+      }
+    },
+    "ClearMemo": {
+      "group": "Hook",
+      "identityStrength": "strong",
+      "fields": {
+        "Owner": {
+          "type": "TokenRef<Manager>",
+          "required": true,
+          "identity": true,
+          "description": "Manager that owns this ClearMemo."
+        },
+        "Key": {
+          "type": "String",
+          "required": true,
+          "identity": true,
+          "description": "Memo key to clear."
+        },
+        "Target": {
+          "type": "TokenRef<Memo>",
+          "required": false,
+          "description": "Memo token cleared by this operation."
+        }
+      }
+    },
+    "ValueStoreAccess": {
+      "group": "Hook",
+      "identityStrength": "strong",
+      "fields": {
+        "Owner": {
+          "type": "TokenRef<Manager>",
+          "required": true,
+          "identity": true,
+          "description": "Manager that owns this value store access."
+        },
+        "Key": {
+          "type": "String",
+          "required": true,
+          "identity": true,
+          "description": "Value store key."
+        },
+        "Operation": {
+          "type": "Enum<ValueStoreOperation>",
+          "required": true,
+          "identity": true,
+          "description": "Value store operation kind."
+        }
+      }
+    },
+    "MessageDispatch": {
+      "group": "Message",
+      "identityStrength": "strong",
+      "fields": {
+        "Owner": {
+          "type": "TokenRef<Manager>",
+          "required": true,
+          "identity": true,
+          "description": "Manager that owns this message dispatch."
+        },
+        "Condition": {
+          "type": "Expression",
+          "required": true,
+          "identity": true,
+          "description": "Dispatch condition expression."
+        },
+        "Cases": {
+          "type": "TokenRefList<MessageCase>",
+          "required": false,
+          "description": "Message case tokens belonging to this dispatch."
+        }
+      }
+    },
+    "MessageCase": {
+      "group": "Message",
+      "identityStrength": "strong",
+      "defaultCondition": "*",
+      "fields": {
+        "Owner": {
+          "type": "TokenRef<MessageDispatch>",
+          "required": true,
+          "identity": true,
+          "description": "MessageDispatch that owns this case."
+        },
+        "Kind": {
+          "type": "Enum<MessageCaseKind>",
+          "required": true,
+          "identity": true,
+          "description": "Message case kind."
+        },
+        "Condition": {
+          "type": "String",
+          "required": true,
+          "identity": true,
+          "description": "Literal case value, or * when Kind is Default."
+        }
+      }
+    },
+    "ControlSignal": {
+      "group": "Control",
+      "identityStrength": "weak",
+      "fields": {
+        "Owner": {
+          "type": "TokenRef<Manager>",
+          "required": true,
+          "identity": true,
+          "description": "Manager that returns this ControlSignal."
+        },
+        "Signal": {
+          "type": "Enum<ControlSignal>",
+          "required": true,
+          "identity": true,
+          "description": "Control signal kind."
+        },
+        "Reason": {
+          "type": "Expression",
+          "required": false,
+          "description": "Reason expression for Stop, Kill, or Crash."
+        },
+        "Error": {
+          "type": "Expression",
+          "required": false,
+          "description": "Returned error expression."
+        }
+      }
+    },
+    "UserEnvRead": {
+      "group": "Hook",
+      "identityStrength": "strong",
+      "fields": {
+        "Owner": {
+          "type": "TokenRef<Manager>",
+          "required": true,
+          "identity": true,
+          "description": "Owning Manager."
+        },
+        "Key": {
+          "type": "String",
+          "required": true,
+          "identity": true,
+          "description": "UserEnv key read through watch.ReadEnv."
+        },
+        "Source": {
+          "type": "String",
+          "required": true,
+          "description": "Fixed user env source file name. Must be .watch.env."
+        },
+        "ValueType": {
+          "type": "TypeExpression",
+          "required": true,
+          "description": "Read value type. Must be string."
+        }
+      }
+    }
+  }
+}

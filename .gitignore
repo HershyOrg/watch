@@ -3,3 +3,12 @@
 *.json
 *.jsonl
 *.md
+!AGENTS.md
+!contracts/
+!contracts/*.json
+!contracts/scripts/
+!contracts/scripts/*.py
+!docs/
+!docs/contracts/
+!docs/contracts/*.md
+.watch.env

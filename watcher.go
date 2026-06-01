@@ -48,7 +48,7 @@ func NewWatcher(config WatcherConfig) (*Watcher, error) {
 }
 
 // Manage registers a function to be managed by the Watcher.
-func (w *Watcher) Manage(fn manager.ManagedFunc, name string, envVars map[string]any) *manager.CleanupBuilder {
+func (w *Watcher) Manage(fn manager.ManagedFunc, name string, configValues map[string]any) *manager.CleanupBuilder {
 	w.lifecycleMu.Lock()
 	defer w.lifecycleMu.Unlock()
 
@@ -65,7 +65,7 @@ func (w *Watcher) Manage(fn manager.ManagedFunc, name string, envVars map[string
 		name,
 		wrappedFn,
 		nil,
-		envVars,
+		configValues,
 	)
 
 	w.manager.SetMachineRegistry(w)
