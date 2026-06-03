@@ -6,30 +6,33 @@ from pathlib import Path
 
 CONTRACT_ROOT = Path(__file__).resolve().parents[1]
 WATCH_ROOT = CONTRACT_ROOT.parent
-MANIFEST = CONTRACT_ROOT / "watch.tokens.v1.json"
-DOC = WATCH_ROOT / "docs" / "contracts" / "watch-token-contract.md"
+MANIFEST = CONTRACT_ROOT / 'watch.tokens.v1.json'
+DOC = WATCH_ROOT / 'docs' / 'contracts' / 'watch-token-contract.md'
 
-EXPECTED_SCHEMA_VERSION = "watch.tokens.v1"
-EXPECTED_GROUPS = {"Component", "Hook", "Message", "Control"}
-EXPECTED_IDENTITY_STRENGTHS = {"strong", "weak"}
-EXPECTED_CONTROL_SIGNALS = ["None", "Stop", "Kill", "Crash"]
-EXPECTED_MESSAGE_CASE_KINDS = ["Literal", "Default"]
+EXPECTED_SCHEMA_VERSION = 'watch.tokens.v1'
+EXPECTED_GROUPS = {'Component', 'Hook', 'Message', 'Control'}
+EXPECTED_CONTROL_SIGNALS = ['None', 'Stop', 'Kill', 'Crash']
+EXPECTED_MESSAGE_CASE_KINDS = ['Literal', 'Default']
 FORBIDDEN_KEYS = {
-    "relationFields",
-    "valueFields",
-    "roles",
-    "identityFields",
-    "variantIdentityFields",
-    "identityWhen",
-    "claimID",
-    "provider",
-    "artifactElement",
-    "sourceRefs",
-    "diagnostics",
-    "provenance",
-    "confidence",
+    'relationFields',
+    'valueFields',
+    'roles',
+    'identity',
+    'identityStrength',
+    'identityFields',
+    'variantIdentityFields',
+    'identityWhen',
+    'singleton',
+    'claimID',
+    'provider',
+    'artifactElement',
+    'sourceRefs',
+    'diagnostics',
+    'provenance',
+    'confidence',
 }
-GENERIC_RE = re.compile(r"^(Enum|TokenRef|TokenRefList)<([A-Za-z][A-Za-z0-9]*)>$")
+RESERVED_ID_FIELD_NAMES = {'id', 'Id', 'ID'}
+GENERIC_RE = re.compile('^(Enum|TokenRef|TokenRefList)<([A-Za-z][A-Za-z0-9]*)>' + chr(36))
 
 
 def fail(message: str) -> None:
@@ -37,140 +40,134 @@ def fail(message: str) -> None:
 
 
 def main() -> None:
-    data = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    doc = DOC.read_text(encoding="utf-8")
+    data = json.loads(MANIFEST.read_text(encoding='utf-8'))
+    doc = DOC.read_text(encoding='utf-8')
 
-    if data.get("schemaVersion") != EXPECTED_SCHEMA_VERSION:
-        fail(f"schemaVersion must be {EXPECTED_SCHEMA_VERSION}")
+    if data.get('schemaVersion') != EXPECTED_SCHEMA_VERSION:
+        fail('schemaVersion must be ' + EXPECTED_SCHEMA_VERSION)
 
+    validate_contract_policy(data.get('contractPolicy'))
     find_forbidden_keys(data)
 
-    field_types = data.get("fieldTypes")
-    generic_field_types = data.get("genericFieldTypes")
-    enums = data.get("enums")
-    tokens = data.get("tokens")
+    field_types = data.get('fieldTypes')
+    generic_field_types = data.get('genericFieldTypes')
+    enums = data.get('enums')
+    tokens = data.get('tokens')
     if not isinstance(field_types, dict) or not field_types:
-        fail("fieldTypes must be a non-empty object")
+        fail('fieldTypes must be a non-empty object')
     if not isinstance(generic_field_types, dict) or not generic_field_types:
-        fail("genericFieldTypes must be a non-empty object")
+        fail('genericFieldTypes must be a non-empty object')
     if not isinstance(enums, dict) or not enums:
-        fail("enums must be a non-empty object")
+        fail('enums must be a non-empty object')
     if not isinstance(tokens, dict) or not tokens:
-        fail("tokens must be a non-empty object")
+        fail('tokens must be a non-empty object')
 
-    if enums.get("ControlSignal") != EXPECTED_CONTROL_SIGNALS:
-        fail(f"ControlSignal enum mismatch: {enums.get('ControlSignal')!r}")
-    if enums.get("MessageCaseKind") != EXPECTED_MESSAGE_CASE_KINDS:
-        fail(f"MessageCaseKind enum mismatch: {enums.get('MessageCaseKind')!r}")
+    if enums.get('ControlSignal') != EXPECTED_CONTROL_SIGNALS:
+        fail('ControlSignal enum mismatch: ' + repr(enums.get('ControlSignal')))
+    if enums.get('MessageCaseKind') != EXPECTED_MESSAGE_CASE_KINDS:
+        fail('MessageCaseKind enum mismatch: ' + repr(enums.get('MessageCaseKind')))
 
+    tick = chr(96)
     for enum_name, values in enums.items():
         if not isinstance(values, list) or not values:
-            fail(f"enum {enum_name!r} must be a non-empty list")
+            fail('enum ' + repr(enum_name) + ' must be a non-empty list')
         for value in values:
             if not isinstance(value, str) or not value:
-                fail(f"enum {enum_name!r} contains an invalid value {value!r}")
-            if f"`{value}`" not in doc:
-                fail(f"enum value {enum_name}.{value} is missing from documentation")
+                fail('enum ' + repr(enum_name) + ' contains an invalid value ' + repr(value))
+            if tick + value + tick not in doc:
+                fail('enum value ' + enum_name + '.' + value + ' is missing from documentation')
 
     for token_name, token in tokens.items():
         validate_token(token_name, token, field_types, enums, tokens, doc)
 
     validate_message_case(tokens, doc)
-    print(f"ok: {len(tokens)} tokens, {len(enums)} enums")
+    print('ok: ' + str(len(tokens)) + ' tokens, ' + str(len(enums)) + ' enums')
 
 
-def find_forbidden_keys(value, path: str = "$") -> None:
+def validate_contract_policy(policy) -> None:
+    if not isinstance(policy, dict):
+        fail('contractPolicy must be an object')
+    if policy.get('definesCanonicalID') is not False:
+        fail('contractPolicy.definesCanonicalID must be false')
+    if policy.get('definesInstanceIdentity') is not False:
+        fail('contractPolicy.definesInstanceIdentity must be false')
+
+
+def find_forbidden_keys(value, path: str = chr(36)) -> None:
     if isinstance(value, dict):
         for key, child in value.items():
             if key in FORBIDDEN_KEYS:
-                fail(f"forbidden key {key!r} found at {path}")
-            find_forbidden_keys(child, f"{path}.{key}")
+                fail('forbidden key ' + repr(key) + ' found at ' + path)
+            find_forbidden_keys(child, path + '.' + key)
     elif isinstance(value, list):
         for i, child in enumerate(value):
-            find_forbidden_keys(child, f"{path}[{i}]")
+            find_forbidden_keys(child, path + '[' + str(i) + ']')
 
 
 def validate_token(token_name, token, field_types, enums, tokens, doc) -> None:
-    if f"### {token_name}" not in doc:
-        fail(f"token {token_name!r} is missing from documentation")
+    if '### ' + token_name not in doc:
+        fail('token ' + repr(token_name) + ' is missing from documentation')
     if not isinstance(token, dict):
-        fail(f"token {token_name!r} must be an object")
+        fail('token ' + repr(token_name) + ' must be an object')
 
-    group = token.get("group")
+    group = token.get('group')
     if group not in EXPECTED_GROUPS:
-        fail(f"token {token_name!r} has invalid group {group!r}")
+        fail('token ' + repr(token_name) + ' has invalid group ' + repr(group))
 
-    identity_strength = token.get("identityStrength")
-    if identity_strength not in EXPECTED_IDENTITY_STRENGTHS:
-        fail(f"token {token_name!r} has invalid identityStrength {identity_strength!r}")
-
-    fields = token.get("fields")
+    fields = token.get('fields')
     if not isinstance(fields, dict) or not fields:
-        fail(f"token {token_name!r} must declare a non-empty fields object")
+        fail('token ' + repr(token_name) + ' must declare a non-empty fields object')
 
     for field_name, field in fields.items():
+        if field_name in RESERVED_ID_FIELD_NAMES:
+            fail('field ' + token_name + '.' + field_name + ' must not define a canonical id')
         validate_field(token_name, field_name, field, field_types, enums, tokens)
-
-    identity_fields = [
-        field_name
-        for field_name, field in fields.items()
-        if field.get("identity") is True
-    ]
-    for field_name in identity_fields:
-        if fields[field_name].get("required") is not True:
-            fail(f"identity field {token_name}.{field_name} must be required")
-    if not identity_fields:
-        if identity_strength != "weak" or token.get("singleton") is not True:
-            fail(f"token {token_name!r} must have identity fields or be a weak singleton")
 
 
 def validate_field(token_name, field_name, field, field_types, enums, tokens) -> None:
     if not isinstance(field, dict):
-        fail(f"field {token_name}.{field_name} must be an object")
-    if "type" not in field:
-        fail(f"field {token_name}.{field_name} is missing type")
-    if "required" not in field:
-        fail(f"field {token_name}.{field_name} is missing required")
-    if not isinstance(field["required"], bool):
-        fail(f"field {token_name}.{field_name}.required must be boolean")
-    if "identity" in field and not isinstance(field["identity"], bool):
-        fail(f"field {token_name}.{field_name}.identity must be boolean")
+        fail('field ' + token_name + '.' + field_name + ' must be an object')
+    if 'type' not in field:
+        fail('field ' + token_name + '.' + field_name + ' is missing type')
+    if 'required' not in field:
+        fail('field ' + token_name + '.' + field_name + ' is missing required')
+    if not isinstance(field['required'], bool):
+        fail('field ' + token_name + '.' + field_name + '.required must be boolean')
 
-    field_type = field["type"]
+    field_type = field['type']
     if field_type in field_types:
         return
 
     match = GENERIC_RE.match(field_type)
     if not match:
-        fail(f"field {token_name}.{field_name} uses unknown type {field_type!r}")
+        fail('field ' + token_name + '.' + field_name + ' uses unknown type ' + repr(field_type))
 
     generic, target = match.groups()
-    if generic == "Enum":
+    if generic == 'Enum':
         if target not in enums:
-            fail(f"field {token_name}.{field_name} references unknown enum {target!r}")
+            fail('field ' + token_name + '.' + field_name + ' references unknown enum ' + repr(target))
         return
     if target not in tokens:
-        fail(f"field {token_name}.{field_name} references unknown token {target!r}")
+        fail('field ' + token_name + '.' + field_name + ' references unknown token ' + repr(target))
 
 
 def validate_message_case(tokens, doc: str) -> None:
-    token = tokens.get("MessageCase")
+    token = tokens.get('MessageCase')
     if not isinstance(token, dict):
-        fail("MessageCase token is missing")
-    if token.get("defaultCondition") != "*":
-        fail("MessageCase defaultCondition must be '*'")
-    if "`Condition` is `*`" not in doc and "`Condition`은 `*`" not in doc:
-        fail("MessageCase default condition sentinel must be documented")
-    fields = token.get("fields", {})
-    for field_name in ["Owner", "Kind", "Condition"]:
+        fail('MessageCase token is missing')
+    if token.get('defaultCondition') != '*':
+        fail('MessageCase defaultCondition must be star')
+    tick = chr(96)
+    if tick + 'Condition' + tick + ' is ' + tick + '*' + tick not in doc and tick + 'Condition' + tick + '은 ' + tick + '*' + tick not in doc:
+        fail('MessageCase default condition sentinel must be documented')
+    fields = token.get('fields', {})
+    for field_name in ['Owner', 'Kind', 'Condition']:
         field = fields.get(field_name)
         if not isinstance(field, dict):
-            fail(f"MessageCase.{field_name} is missing")
-        if field.get("required") is not True:
-            fail(f"MessageCase.{field_name} must be required")
-        if field.get("identity") is not True:
-            fail(f"MessageCase.{field_name} must be an identity field")
+            fail('MessageCase.' + field_name + ' is missing')
+        if field.get('required') is not True:
+            fail('MessageCase.' + field_name + ' must be required')
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

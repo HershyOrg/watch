@@ -2,22 +2,21 @@
 
 ## 1. Purpose
 
-이 문서는 Watch framework vocabulary의 canonical source다. Watch로 작성된 코드나 설명에서 공통으로 참조할 수 있는 token kind, field, field type, enum, identity policy를 정의한다.
+이 문서는 Watch framework vocabulary의 canonical source다. Watch로 작성된 코드나 설명에서 공통으로 참조할 수 있는 token kind, field, field type, enum, token reference type을 정의한다.
 
 이 계약이 정의하는 것은 Watch token language다.
 
 - 어떤 Watch token kind가 있는가.
 - 각 token이 어떤 field를 가질 수 있는가.
 - 각 field가 어떤 type과 required 여부를 가지는가.
-- 같은 Watch token instance를 맞출 때 어떤 field가 identity에 참여하는가.
-- token identity가 strong인지 weak인지.
 - variant가 있는 token의 field constraint가 무엇인가.
 
 이 계약이 정의하지 않는 것도 명확하다.
 
 - artifact schema가 아니다.
 - claim envelope가 아니다.
-- 비교 알고리즘이 아니다.
+- canonical `id` field를 정의하지 않는다.
+- token instance identity나 matching algorithm을 정의하지 않는다.
 - provider-specific extension, source reference, diagnostic, provenance, confidence를 정의하지 않는다.
 - 외부 도구의 graph, UI, storage, deployment artifact shape를 정의하지 않는다.
 
@@ -27,9 +26,9 @@
 
 기계 판독 manifest는 다음 파일이다.
 
-- `/home/rlaaudgjs5638/thirdeye/watch/contracts/watch.tokens.v1.json`
+- `../../contracts/watch.tokens.v1.json`
 
-현재 schema version은 `watch.tokens.v1`이다. Watch token vocabulary를 바꿀 때는 manifest와 이 문서를 함께 갱신해야 한다.
+현재 schema version은 `watch.tokens.v1`이다. Watch token vocabulary를 바꿀 때는 manifest와 이 문서를 함께 갱신해야 한다. Manifest의 `contractPolicy.definesCanonicalID`와 `contractPolicy.definesInstanceIdentity`는 모두 `false`여야 한다.
 
 ## 3. Field Types
 
@@ -53,39 +52,20 @@ Generic field type:
 | `TokenRef<T>` | Reference to another Watch token instance of kind `T`. |
 | `TokenRefList<T>` | List of references to Watch token instances of kind `T`. |
 
-`TokenRef<T>` and `TokenRefList<T>` express token reference semantics by type. The contract does not use separate `relationFields`, `valueFields`, or field roles.
+`TokenRef<T>` and `TokenRefList<T>` express token reference semantics by type. They do not define a concrete reference encoding, artifact ID, graph edge shape, or lookup algorithm. The contract does not use separate `relationFields`, `valueFields`, or field roles.
 
-## 4. Identity Policy
+## 4. Out of Scope: ID and Matching
 
-Each field may declare `identity: true` in the machine contract. The ordered set of identity fields is the matching key for a Watch token instance. Every identity field must be required. `identityStrength` has two values:
+Watch token contract는 canonical `id` field를 정의하지 않는다. 또한 token instance identity, matching key, comparison algorithm, graph node ID, storage key, cache key를 정의하지 않는다.
 
-- `strong`: the identity can be used as a unique token instance key in normal cases.
-- `weak`: the identity is only a grouping or candidate narrowing key.
+각 consumer나 tool은 자기 목적에 맞게 token instance를 저장하고 참조할 수 있다. 예를 들어 source location, hash, database ID, graph node ID, field 조합, provider-specific handle을 local identifier로 사용할 수 있다. 이런 값은 해당 artifact의 책임이며 Watch token vocabulary의 일부가 아니다.
 
-Identity policy:
+`TokenRef<T>` and `TokenRefList<T>` only say that a field semantically points to another Watch token instance of kind `T`. Concrete reference encoding, resolution, and missing-target behavior are consumer-owned.
 
-| Token | Identity | Strength |
-|---|---|---|
-| `Watcher` | singleton / no base identity field | `weak` |
-| `Manager` | `Name` | `strong` |
-| `Cleanup` | `Owner` | `strong` |
-| `WatchMachine` | `Owner`, `Name` | `strong` |
-| `WatchCall` | `Owner`, `Name` | `strong` |
-| `WatchFlow` | `Owner`, `Name` | `strong` |
-| `WatchTick` | `Owner`, `Name` | `strong` |
-| `Memo` | `Owner`, `Key` | `strong` |
-| `ClearMemo` | `Owner`, `Key` | `strong` |
-| `ValueStoreAccess` | `Owner`, `Key`, `Operation` | `strong` |
-| `MessageDispatch` | `Owner`, `Condition` | `strong` |
-| `MessageCase` | `Owner`, `Kind`, `Condition` | `strong` |
-| `ControlSignal` | `Owner`, `Signal` | `weak` |
-
-`ControlSignal` is weak because the same Manager can return the same signal from multiple sites. Analyzer-specific context such as source location, return ordinal, or branch context is not part of Watch token identity.
-
-`MessageCase` keeps identity simple by always requiring `Condition`:
+`MessageCase` has one reserved data constraint:
 
 - `Kind = Literal`: `Condition` is the literal case value.
-- `Kind = Default`: `Condition` is the reserved default branch sentinel `*`.
+- `Kind = Default`: `Condition` is `*`.
 
 The `*` value is reserved by this contract only for `MessageCase.Kind = Default`.
 
@@ -288,10 +268,6 @@ This is a Watch token instance example only. It is not a claim envelope and does
 ```json
 {
   "kind": "WatchCall",
-  "identity": {
-    "Owner": "Manager:trade",
-    "Name": "btc_price"
-  },
   "fields": {
     "Owner": "Manager:trade",
     "Name": "btc_price",
@@ -305,6 +281,6 @@ This is a Watch token instance example only. It is not a claim envelope and does
 
 Watch token vocabulary changes must update:
 
-- `/home/rlaaudgjs5638/thirdeye/watch/contracts/watch.tokens.v1.json`
-- `/home/rlaaudgjs5638/thirdeye/watch/docs/contracts/watch-token-contract.md`
-- `/home/rlaaudgjs5638/thirdeye/watch/contracts/scripts/validate_watch_tokens.py` when validation rules change
+- `../../contracts/watch.tokens.v1.json`
+- `watch-token-contract.md`
+- `../../contracts/scripts/validate_watch_tokens.py` when validation rules change

@@ -1,5 +1,9 @@
 {
   "schemaVersion": "watch.tokens.v1",
+  "contractPolicy": {
+    "definesCanonicalID": false,
+    "definesInstanceIdentity": false
+  },
   "fieldTypes": {
     "String": "string value",
     "StringList": "list of string values",
@@ -43,8 +47,6 @@
   "tokens": {
     "Watcher": {
       "group": "Component",
-      "identityStrength": "weak",
-      "singleton": true,
       "fields": {
         "Managers": {
           "type": "TokenRefList<Manager>",
@@ -65,12 +67,10 @@
     },
     "Manager": {
       "group": "Component",
-      "identityStrength": "strong",
       "fields": {
         "Name": {
           "type": "String",
           "required": true,
-          "identity": true,
           "description": "Manager name."
         },
         "ManagedFunc": {
@@ -102,12 +102,10 @@
     },
     "Cleanup": {
       "group": "Component",
-      "identityStrength": "strong",
       "fields": {
         "Owner": {
           "type": "TokenRef<Manager>",
           "required": true,
-          "identity": true,
           "description": "Manager that owns this cleanup function."
         },
         "CleanupFunc": {
@@ -119,18 +117,15 @@
     },
     "WatchMachine": {
       "group": "Component",
-      "identityStrength": "strong",
       "fields": {
         "Owner": {
           "type": "TokenRef<Manager>",
           "required": true,
-          "identity": true,
           "description": "Manager that owns the WatchMachine."
         },
         "Name": {
           "type": "String",
           "required": true,
-          "identity": true,
           "description": "WatchMachine name."
         },
         "Kind": {
@@ -162,18 +157,15 @@
     },
     "WatchCall": {
       "group": "Hook",
-      "identityStrength": "strong",
       "fields": {
         "Owner": {
           "type": "TokenRef<Manager>",
           "required": true,
-          "identity": true,
           "description": "Manager that owns this WatchCall."
         },
         "Name": {
           "type": "String",
           "required": true,
-          "identity": true,
           "description": "WatchMachine name created or addressed by this WatchCall."
         },
         "Handler": {
@@ -200,18 +192,15 @@
     },
     "WatchFlow": {
       "group": "Hook",
-      "identityStrength": "strong",
       "fields": {
         "Owner": {
           "type": "TokenRef<Manager>",
           "required": true,
-          "identity": true,
           "description": "Manager that owns this WatchFlow."
         },
         "Name": {
           "type": "String",
           "required": true,
-          "identity": true,
           "description": "WatchMachine name created or addressed by this WatchFlow."
         },
         "Handler": {
@@ -238,18 +227,15 @@
     },
     "WatchTick": {
       "group": "Hook",
-      "identityStrength": "strong",
       "fields": {
         "Owner": {
           "type": "TokenRef<Manager>",
           "required": true,
-          "identity": true,
           "description": "Manager that owns this WatchTick."
         },
         "Name": {
           "type": "String",
           "required": true,
-          "identity": true,
           "description": "WatchMachine name created or addressed by this WatchTick."
         },
         "Tick": {
@@ -266,18 +252,15 @@
     },
     "Memo": {
       "group": "Hook",
-      "identityStrength": "strong",
       "fields": {
         "Owner": {
           "type": "TokenRef<Manager>",
           "required": true,
-          "identity": true,
           "description": "Manager that owns this Memo."
         },
         "Key": {
           "type": "String",
           "required": true,
-          "identity": true,
           "description": "Memo key."
         },
         "ValueType": {
@@ -289,18 +272,15 @@
     },
     "ClearMemo": {
       "group": "Hook",
-      "identityStrength": "strong",
       "fields": {
         "Owner": {
           "type": "TokenRef<Manager>",
           "required": true,
-          "identity": true,
           "description": "Manager that owns this ClearMemo."
         },
         "Key": {
           "type": "String",
           "required": true,
-          "identity": true,
           "description": "Memo key to clear."
         },
         "Target": {
@@ -312,42 +292,35 @@
     },
     "ValueStoreAccess": {
       "group": "Hook",
-      "identityStrength": "strong",
       "fields": {
         "Owner": {
           "type": "TokenRef<Manager>",
           "required": true,
-          "identity": true,
           "description": "Manager that owns this value store access."
         },
         "Key": {
           "type": "String",
           "required": true,
-          "identity": true,
           "description": "Value store key."
         },
         "Operation": {
           "type": "Enum<ValueStoreOperation>",
           "required": true,
-          "identity": true,
           "description": "Value store operation kind."
         }
       }
     },
     "MessageDispatch": {
       "group": "Message",
-      "identityStrength": "strong",
       "fields": {
         "Owner": {
           "type": "TokenRef<Manager>",
           "required": true,
-          "identity": true,
           "description": "Manager that owns this message dispatch."
         },
         "Condition": {
           "type": "Expression",
           "required": true,
-          "identity": true,
           "description": "Dispatch condition expression."
         },
         "Cases": {
@@ -359,43 +332,36 @@
     },
     "MessageCase": {
       "group": "Message",
-      "identityStrength": "strong",
       "defaultCondition": "*",
       "fields": {
         "Owner": {
           "type": "TokenRef<MessageDispatch>",
           "required": true,
-          "identity": true,
           "description": "MessageDispatch that owns this case."
         },
         "Kind": {
           "type": "Enum<MessageCaseKind>",
           "required": true,
-          "identity": true,
           "description": "Message case kind."
         },
         "Condition": {
           "type": "String",
           "required": true,
-          "identity": true,
           "description": "Literal case value, or * when Kind is Default."
         }
       }
     },
     "ControlSignal": {
       "group": "Control",
-      "identityStrength": "weak",
       "fields": {
         "Owner": {
           "type": "TokenRef<Manager>",
           "required": true,
-          "identity": true,
           "description": "Manager that returns this ControlSignal."
         },
         "Signal": {
           "type": "Enum<ControlSignal>",
           "required": true,
-          "identity": true,
           "description": "Control signal kind."
         },
         "Reason": {
@@ -412,18 +378,15 @@
     },
     "UserEnvRead": {
       "group": "Hook",
-      "identityStrength": "strong",
       "fields": {
         "Owner": {
           "type": "TokenRef<Manager>",
           "required": true,
-          "identity": true,
           "description": "Owning Manager."
         },
         "Key": {
           "type": "String",
           "required": true,
-          "identity": true,
           "description": "UserEnv key read through watch.ReadEnv."
         },
         "Source": {
