@@ -1,4 +1,4 @@
-// Package hersh provides a reactive framework for Go with monitoring and control capabilities.
+// Package watch provides a reactive framework for Go with monitoring and control capabilities.
 package watch
 
 import (

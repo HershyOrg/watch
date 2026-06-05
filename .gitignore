@@ -4,6 +4,7 @@
 *.jsonl
 *.md
 !AGENTS.md
+!/README.md
 !contracts/
 !contracts/*.json
 !contracts/scripts/
