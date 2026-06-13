@@ -100,15 +100,8 @@ func delcaredLogic(msg *watch.Message, ctx watch.ManageContext) (watch.ControlSi
 		return NewTradingSimulator(10000.0)
 	}, "sim", ctx)
 
-	apiKey, err := watch.ReadEnv(demoExchangeAPIKey)
-	if err != nil {
-		fmt.Println("환경변수 못읽음!")
-		return watch.Crash(err.Error()), err
-	}
-	accountID, err := watch.ReadEnv(demoExchangeAccountID)
-	if err != nil {
-		return watch.Crash(err.Error()), err
-	}
+	apiKey := watch.ReadEnv(demoExchangeAPIKey)
+	accountID := watch.ReadEnv(demoExchangeAccountID)
 	paperExchange := NewDemoExchangeSession(apiKey, accountID)
 
 	if msg == nil {

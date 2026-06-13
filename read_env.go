@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+
+	"github.com/HershyOrg/watch/shared"
 )
 
 const UserEnvFileName = ".watch.env"
@@ -32,20 +34,29 @@ var userEnvCaches sync.Map // map[string]*userEnvFileCache
 
 // ReadEnv reads a user-provided string from the caller directory's .watch.env.
 // It never reads process environment variables and caches each .watch.env file
-// by absolute path after the first parse.
-func ReadEnv(key string) (string, error) {
+// by absolute path after the first parse. Read failures panic with
+// WatchInitPanic because .watch.env is initialization input.
+func ReadEnv(key string) string {
 	if !validUserEnvKey(key) {
-		return "", fmt.Errorf("%w: %q", ErrUserEnvInvalidKey, key)
+		panicReadEnv(key, fmt.Errorf("%w: %q", ErrUserEnvInvalidKey, key))
 	}
 	_, callerFile, _, ok := runtime.Caller(1)
 	if !ok || callerFile == "" {
-		return "", ErrUserEnvCallerUnknown
+		panicReadEnv(key, ErrUserEnvCallerUnknown)
 	}
 	path, err := filepath.Abs(filepath.Join(filepath.Dir(callerFile), UserEnvFileName))
 	if err != nil {
-		return "", fmt.Errorf("resolve %s: %w", UserEnvFileName, err)
+		panicReadEnv(key, fmt.Errorf("resolve %s: %w", UserEnvFileName, err))
 	}
-	return readUserEnv(path, key)
+	value, err := readUserEnv(path, key)
+	if err != nil {
+		panicReadEnv(key, err)
+	}
+	return value
+}
+
+func panicReadEnv(key string, cause error) {
+	panic(shared.NewWatchInitPanic("ReadEnv:"+key, "failed to read user env", cause))
 }
 
 func readUserEnv(path, key string) (string, error) {

@@ -322,11 +322,6 @@
           "type": "Expression",
           "required": true,
           "description": "Dispatch condition expression."
-        },
-        "Cases": {
-          "type": "TokenRefList<MessageCase>",
-          "required": false,
-          "description": "Message case tokens belonging to this dispatch."
         }
       }
     },
@@ -387,7 +382,7 @@
         "Key": {
           "type": "String",
           "required": true,
-          "description": "UserEnv key read through watch.ReadEnv."
+          "description": "UserEnv key read through watch.ReadEnv. Read failures are reported as WatchInitPanic."
         },
         "Source": {
           "type": "String",

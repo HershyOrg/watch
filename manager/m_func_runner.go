@@ -2,8 +2,8 @@ package manager
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -19,8 +19,9 @@ type ManagedFunc func(message *shared.Message, ctx shared.ManageContext) (shared
 
 // runResult holds the result of a ManagedFunc execution.
 type runResult struct {
-	signal shared.ControlSignal
-	err    error
+	signal   shared.ControlSignal
+	err      error
+	panicked bool
 }
 
 // Cleaner provides cleanup functionality for managed functions.
@@ -223,11 +224,11 @@ func (t *MgrfuncRnner) executeRun(effect *RunEffect) (*EffectResult, EffectDrive
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				done <- runResult{shared.None(), fmt.Errorf("panic: %v", r)}
+				done <- runResult{signal: shared.None(), err: recoveredPanicError(r), panicked: true}
 			}
 		}()
 		sig, err := fn(msg, t.manageCtx)
-		done <- runResult{sig, err}
+		done <- runResult{signal: sig, err: err}
 	}()
 
 	// Wait for completion or timeout
@@ -249,7 +250,7 @@ func (t *MgrfuncRnner) executeRun(effect *RunEffect) (*EffectResult, EffectDrive
 		if !res.signal.IsNone() || res.err != nil {
 			result.Success = false
 			result.Error = res.err
-			drivenEvent = t.handleRunResult(res.signal, res.err)
+			drivenEvent = t.handleRunResult(res.signal, res.err, res.panicked)
 		} else {
 			result.Success = true
 			// MgrFuncRunnerState → Idle
@@ -263,12 +264,18 @@ func (t *MgrfuncRnner) executeRun(effect *RunEffect) (*EffectResult, EffectDrive
 	return result, drivenEvent
 }
 
+func recoveredPanicError(r any) error {
+	if err, ok := r.(error); ok {
+		return fmt.Errorf("panic: %w", err)
+	}
+	return fmt.Errorf("panic: %v", r)
+}
+
 // handleRunResult processes the ControlSignal and error from managed function execution.
-func (t *MgrfuncRnner) handleRunResult(signal shared.ControlSignal, err error) EffectDrivenEvent {
-	// Check for WatchInitPanic pattern - crash immediately (from panic recovery)
-	if err != nil {
-		errMsg := err.Error()
-		if strings.Contains(errMsg, "panic:") && strings.Contains(errMsg, "WatchInitPanic") {
+func (t *MgrfuncRnner) handleRunResult(signal shared.ControlSignal, err error, panicked bool) EffectDrivenEvent {
+	if panicked {
+		var initPanic *shared.WatchInitPanic
+		if errors.As(err, &initPanic) {
 			t.mu.Lock()
 			t.state = shared.RunnerCrashed
 			t.mu.Unlock()

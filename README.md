@@ -204,17 +204,14 @@ func managed(msg *watch.Message, ctx watch.ManageContext) (watch.ControlSignal, 
 
 ### ReadEnv
 
-`ReadEnv` reads a string from a `.watch.env` file in the caller file's directory. It does not read process environment variables.
+`ReadEnv` reads a string from a `.watch.env` file in the caller file's directory. It does not read process environment variables. Read failures panic as watch initialization failures.
 
 ```text
 API_KEY=local-development-key
 ```
 
 ```go
-apiKey, err := watch.ReadEnv("API_KEY")
-if err != nil {
-	return watch.None(), err
-}
+apiKey := watch.ReadEnv("API_KEY")
 _ = apiKey
 ```
 

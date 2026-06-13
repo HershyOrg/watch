@@ -216,12 +216,12 @@ Hook token for `GetValue`, `SetValue`, or `UpdateValue`.
 
 ### UserEnvRead
 
-Hook token for `watch.ReadEnv`. It represents a user-info read from the caller directory fixed `.watch.env` file. The raw value is never part of the token claim or any artifact.
+Hook token for `watch.ReadEnv`. It represents a user-info read from the caller directory fixed `.watch.env` file. `ReadEnv` returns a `string`; read, parse, and missing-key failures are reported as watch initialization panics. The raw value is never part of the token claim or any artifact.
 
 | Field | Type | Required | Meaning |
 |---|---|---|---|
 | `Owner` | `TokenRef<Manager>` | yes | Owning Manager. |
-| `Key` | `String` | yes | UserEnv key read through `watch.ReadEnv`. |
+| `Key` | `String` | yes | UserEnv key read through `watch.ReadEnv`; failures are initialization panics. |
 | `Source` | `String` | yes | Fixed source file name: `.watch.env`. |
 | `ValueType` | `TypeExpression` | yes | Always `string`. |
 
