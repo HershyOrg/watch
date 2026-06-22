@@ -9,7 +9,7 @@ import (
 	"github.com/HershyOrg/watch"
 )
 
-const expectedWatchVersion = "v0.2.0"
+const expectedWatchVersion = "v0.2.1"
 
 func main() {
 	version := watchVersion()

@@ -7,7 +7,7 @@ This project is currently released as `v0`. Public APIs may change before `v1`.
 ## Install
 
 ```bash
-go get github.com/HershyOrg/watch@v0.2.0
+go get github.com/HershyOrg/watch@v0.2.1
 ```
 
 The recommended public API starts with the root package:
@@ -226,7 +226,7 @@ replace github.com/HershyOrg/watch => ../
 
 That keeps local framework changes visible immediately.
 
-`version_demo/` is separate. It has no local `replace`, requires `github.com/HershyOrg/watch v0.2.0`, prints the linked watch module version, and runs a small `WatchTick` smoke test.
+`version_demo/` is separate. It has no local `replace`, requires `github.com/HershyOrg/watch v0.2.1`, prints the linked watch module version, and runs a small `WatchTick` smoke test.
 
 ```bash
 cd version_demo
